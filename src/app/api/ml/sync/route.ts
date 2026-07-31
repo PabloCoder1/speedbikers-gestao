@@ -37,7 +37,8 @@ async function getValidToken(supabase: any, userId: string) {
 // GET /api/ml/sync
 // Puxa vendas recentes do vendedor e devolve linhas já no formato que o
 // dashboard entende (sku, titulo, data, unidades, receita, preço).
-export async function GET() {
+// GET /api/ml/sync?dias=30  (7 | 30 | 60 | 90 | 0=total)
+export async function GET(req: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "não autenticado" }, { status: 401 });
@@ -53,14 +54,24 @@ export async function GET() {
   const me = await meResp.json();
   const sellerId = me.id;
 
-  // vendas dos últimos ~60 dias, paginando
-  const desde = new Date(Date.now() - 60 * 86400_000).toISOString();
+  // período escolhido no app (0 = pega o máximo que a API deixar)
+  const { searchParams } = new URL(req.url);
+  const dias = parseInt(searchParams.get("dias") || "60", 10);
+
+  // filtro de data: se dias>0, limita; se dias=0, busca tudo (até o teto da API)
+  const desdeParam = dias > 0
+    ? `&order.date_created.from=${encodeURIComponent(new Date(Date.now() - dias * 86400_000).toISOString())}`
+    : "";
+
+  // A API de pedidos do ML permite paginar até ~10.000 registros (offset máx).
+  // Vamos até 200 páginas de 50 = 10.000 pedidos, parando antes se acabar.
+  const MAX_PAGINAS = 200;
   const rows: any[] = [];
   let offset = 0;
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < MAX_PAGINAS; i++) {
     const url =
       `https://api.mercadolibre.com/orders/search?seller=${sellerId}` +
-      `&order.date_created.from=${encodeURIComponent(desde)}` +
+      desdeParam +
       `&sort=date_desc&limit=50&offset=${offset}`;
     const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
     if (!r.ok) break;
@@ -76,13 +87,15 @@ export async function GET() {
           unidades: it.quantity ?? 0,
           receita: (it.unit_price ?? 0) * (it.quantity ?? 0),
           preco: it.unit_price ?? 0,
-          oficial: "", // preenchível conforme sua conta oficial
+          oficial: "",
         });
       }
     }
-    if (results.length < 50) break;
+    if (results.length < 50) break;   // acabaram os pedidos
     offset += 50;
+    // proteção: o ML rejeita offset acima de ~10.000
+    if (offset >= 10000) break;
   }
 
-  return NextResponse.json({ ok: true, seller: sellerId, count: rows.length, rows });
+  return NextResponse.json({ ok: true, seller: sellerId, count: rows.length, dias, rows });
 }

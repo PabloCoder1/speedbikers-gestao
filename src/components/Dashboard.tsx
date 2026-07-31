@@ -123,6 +123,8 @@ export default function Dashboard({ role, email, initialLocked }) {
   const [fRecom, setFRecom] = useState("Todos");
   const [fAlertas, setFAlertas] = useState("Todos");
   const [cobertura, setCobertura] = useState(90); // dias de venda que cada pedido cobre
+  const [periodoDias, setPeriodoDias] = useState(30); // filtro de período do ML (0=total)
+  const [ultimasVendas, setUltimasVendas] = useState([]); // 20 vendas mais recentes
 
   const readFile = useCallback((file, wanted, setRaw, setName) => {
     setErr(""); setBusy(true);
@@ -139,19 +141,23 @@ export default function Dashboard({ role, email, initialLocked }) {
   }, []);
 
   // ---- sincronizar via API do Mercado Livre ----
-  const syncML = useCallback(async () => {
+  const syncML = useCallback(async (dias) => {
     setMlBusy(true); setMlMsg("");
     try {
-      const r = await fetch("/api/ml/sync");
+      const r = await fetch(`/api/ml/sync?dias=${dias}`);
       const j = await r.json();
       if (!r.ok || j.error) {
         setMlMsg(j.error === "sem_conexao_ml"
           ? "Conecte sua conta do Mercado Livre primeiro (botão abaixo)."
           : "Erro ao sincronizar: " + (j.error || r.status));
       } else {
-        setVendasRaw(mlRowsToVendas(j.rows));
-        setVName(`Mercado Livre — ${j.count} vendas (tempo real)`);
-        setMlMsg(`Sincronizado: ${j.count} itens de venda dos últimos 60 dias.`);
+        const rows = mlRowsToVendas(j.rows);
+        setVendasRaw(rows);
+        const label = dias === 0 ? "período total disponível" : `últimos ${dias} dias`;
+        setVName(`Mercado Livre — ${j.count} vendas (${label})`);
+        setMlMsg(`Sincronizado: ${j.count} itens de venda dos ${label}.`);
+        // guarda as 20 vendas mais recentes (a API já vem ordenada por data desc)
+        setUltimasVendas((j.rows || []).slice(0, 20));
       }
     } catch (e) { setMlMsg("Falha de rede ao sincronizar."); }
     setMlBusy(false);
@@ -257,8 +263,20 @@ export default function Dashboard({ role, email, initialLocked }) {
           <div className="bg-white border border-slate-200 rounded-2xl p-6 mb-6">
             <div className="flex items-center gap-2 font-bold text-slate-800 mb-1"><Cloud size={18} className="text-sbblue" /> Dados em tempo real do Mercado Livre</div>
             <p className="text-sm text-slate-500 mb-4">Puxa suas vendas direto da API. O estoque continua vindo do upload do Upseller (que ainda não tem API).</p>
+
+            {/* filtro de período */}
+            <div className="mb-3">
+              <div className="text-xs font-semibold text-slate-500 mb-1.5">Período das vendas</div>
+              <div className="flex items-center bg-slate-100 rounded-lg p-1 w-fit flex-wrap">
+                {([[7, "7 dias"], [30, "30 dias"], [60, "60 dias"], [90, "90 dias"], [0, "Total"]] as any[]).map(([d, l]) => (
+                  <button key={d} onClick={() => setPeriodoDias(Number(d))}
+                    className={`px-3 py-1.5 rounded-md text-[13px] font-bold transition ${periodoDias === d ? "bg-white shadow text-slate-900" : "text-slate-500"}`}>{l}</button>
+                ))}
+              </div>
+            </div>
+
             <div className="flex gap-3 flex-wrap">
-              <button onClick={syncML} disabled={mlBusy}
+              <button onClick={() => syncML(periodoDias)} disabled={mlBusy}
                 className="flex items-center gap-2 bg-sbblue text-white font-bold rounded-lg px-4 py-2 disabled:opacity-60">
                 <RefreshCw size={16} className={mlBusy ? "animate-spin" : ""} /> Sincronizar vendas
               </button>
@@ -268,6 +286,37 @@ export default function Dashboard({ role, email, initialLocked }) {
               </a>
             </div>
             {mlMsg && <div className="text-sm mt-3 text-slate-700 bg-slate-100 rounded-lg px-3 py-2">{mlMsg}</div>}
+            {periodoDias === 0 && (
+              <div className="text-xs text-amber-600 mt-2">O período "Total" busca o máximo que a API do Mercado Livre permite (até ~10.000 pedidos) e pode demorar mais.</div>
+            )}
+
+            {/* últimas vendas */}
+            {ultimasVendas.length > 0 && (
+              <div className="mt-5 border border-slate-200 rounded-xl overflow-hidden">
+                <div className="flex items-center gap-2 font-bold text-slate-800 px-4 py-3 bg-slate-50 border-b border-slate-100">
+                  <ShoppingCart size={16} className="text-sbblue" /> Últimos produtos vendidos
+                </div>
+                <div className="max-h-[320px] overflow-auto">
+                  <table className="w-full text-[13px]">
+                    <thead className="bg-white sticky top-0"><tr>
+                      <Th>Data</Th><Th>SKU</Th><Th>Produto</Th><Th right>Qtd</Th><Th right>Valor</Th>
+                    </tr></thead>
+                    <tbody>
+                      {ultimasVendas.map((v, i) => (
+                        <tr key={i} className="border-b border-slate-100">
+                          <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{new Date(v.data).toLocaleDateString("pt-BR")}</td>
+                          <td className="px-3 py-2 font-mono text-xs">{v.sku}</td>
+                          <td className="px-3 py-2 max-w-[300px] truncate" title={v.titulo}>{v.titulo || "—"}</td>
+                          <td className="px-3 py-2 text-right">{v.unidades}</td>
+                          <td className="px-3 py-2 text-right font-semibold">{brlc(v.receita)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
             <div className="mt-4">
               <Dropzone tone="red" title="Planilha de Estoque (Upseller) — necessária para reposição"
                 hint="Mesmo em tempo real, o estoque vem do upload."
