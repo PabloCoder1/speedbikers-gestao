@@ -14,10 +14,15 @@ export async function GET() {
   // 'state' liga o retorno do ML ao nosso usuário logado
   const state = user.id;
 
+  // offline_access é OBRIGATÓRIO para o ML devolver um refresh_token.
+  // Sem ele, só volta o access_token de 6h e a gravação no banco falha.
+  const scope = "offline_access read write";
+
   const url =
     `https://auth.mercadolivre.com.br/authorization?response_type=code` +
     `&client_id=${encodeURIComponent(clientId)}` +
     `&redirect_uri=${encodeURIComponent(redirect)}` +
+    `&scope=${encodeURIComponent(scope)}` +
     `&state=${encodeURIComponent(state)}`;
 
   return NextResponse.redirect(url);

@@ -48,7 +48,7 @@ export async function GET(req: Request) {
     user_id: userId,
     ml_user_id: tok.user_id ?? null,
     access_token: tok.access_token,
-    refresh_token: tok.refresh_token,
+    refresh_token: tok.refresh_token ?? "", // evita erro se o ML não devolver refresh
     expires_at: expiresAt,
   });
 
