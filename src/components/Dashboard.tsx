@@ -124,7 +124,7 @@ export default function Dashboard({ role, email, initialLocked }) {
   const [fAlertas, setFAlertas] = useState("Todos");
   const [cobertura, setCobertura] = useState(90); // dias de venda que cada pedido cobre
   const [periodoDias, setPeriodoDias] = useState(30); // filtro de período do ML (0=total)
-  const [ultimasVendas, setUltimasVendas] = useState([]); // 20 vendas mais recentes
+  const [vendasHoje, setVendasHoje] = useState([]); // vendas de hoje agrupadas por produto
 
   const readFile = useCallback((file, wanted, setRaw, setName) => {
     setErr(""); setBusy(true);
@@ -156,8 +156,24 @@ export default function Dashboard({ role, email, initialLocked }) {
         const label = dias === 0 ? "período total disponível" : `últimos ${dias} dias`;
         setVName(`Mercado Livre — ${j.count} vendas (${label})`);
         setMlMsg(`Sincronizado: ${j.count} itens de venda dos ${label}.`);
-        // guarda as 20 vendas mais recentes (a API já vem ordenada por data desc)
-        setUltimasVendas((j.rows || []).slice(0, 20));
+
+        // ---- vendas de HOJE, agrupadas por produto (acumulado) ----
+        // "hoje" no fuso do Brasil (America/Sao_Paulo), pra não errar perto da meia-noite
+        const hojeBR = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }); // AAAA-MM-DD
+        const mapa = new Map();
+        for (const v of (j.rows || [])) {
+          if (!v.data) continue;
+          const diaBR = new Date(v.data).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+          if (diaBR !== hojeBR) continue;
+          const key = v.sku || v.mlb || v.titulo;
+          let o = mapa.get(key);
+          if (!o) { o = { sku: v.sku, titulo: v.titulo, unidades: 0, receita: 0 }; mapa.set(key, o); }
+          o.unidades += Number(v.unidades) || 0;
+          o.receita += Number(v.receita) || 0;
+          if (v.titulo) o.titulo = v.titulo;
+        }
+        const lista = [...mapa.values()].sort((a, b) => b.unidades - a.unidades);
+        setVendasHoje(lista);
       }
     } catch (e) { setMlMsg("Falha de rede ao sincronizar."); }
     setMlBusy(false);
@@ -290,24 +306,31 @@ export default function Dashboard({ role, email, initialLocked }) {
               <div className="text-xs text-amber-600 mt-2">O período "Total" busca o máximo que a API do Mercado Livre permite (até ~10.000 pedidos) e pode demorar mais.</div>
             )}
 
-            {/* últimas vendas */}
-            {ultimasVendas.length > 0 && (
+            {/* vendas de hoje (acumulado por produto) */}
+            {vendasHoje.length > 0 ? (
               <div className="mt-5 border border-slate-200 rounded-xl overflow-hidden">
-                <div className="flex items-center gap-2 font-bold text-slate-800 px-4 py-3 bg-slate-50 border-b border-slate-100">
-                  <ShoppingCart size={16} className="text-sbblue" /> Últimos produtos vendidos
+                <div className="flex items-center justify-between gap-2 px-4 py-3 bg-slate-50 border-b border-slate-100">
+                  <div className="flex items-center gap-2 font-bold text-slate-800">
+                    <ShoppingCart size={16} className="text-sbblue" /> Vendas de hoje
+                    <span className="text-xs font-normal text-slate-400">
+                      {new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit" })}
+                    </span>
+                  </div>
+                  <div className="text-sm font-bold text-slate-700">
+                    {vendasHoje.reduce((a, b) => a + b.unidades, 0)} un · {brl(vendasHoje.reduce((a, b) => a + b.receita, 0))}
+                  </div>
                 </div>
-                <div className="max-h-[320px] overflow-auto">
+                <div className="max-h-[360px] overflow-auto">
                   <table className="w-full text-[13px]">
                     <thead className="bg-white sticky top-0"><tr>
-                      <Th>Data</Th><Th>SKU</Th><Th>Produto</Th><Th right>Qtd</Th><Th right>Valor</Th>
+                      <Th>SKU</Th><Th>Produto</Th><Th right>Vendidos hoje</Th><Th right>Faturamento</Th>
                     </tr></thead>
                     <tbody>
-                      {ultimasVendas.map((v, i) => (
+                      {vendasHoje.map((v, i) => (
                         <tr key={i} className="border-b border-slate-100">
-                          <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{new Date(v.data).toLocaleDateString("pt-BR")}</td>
                           <td className="px-3 py-2 font-mono text-xs">{v.sku}</td>
-                          <td className="px-3 py-2 max-w-[300px] truncate" title={v.titulo}>{v.titulo || "—"}</td>
-                          <td className="px-3 py-2 text-right">{v.unidades}</td>
+                          <td className="px-3 py-2 max-w-[320px] truncate" title={v.titulo}>{v.titulo || "—"}</td>
+                          <td className="px-3 py-2 text-right font-bold text-slate-900">{v.unidades}</td>
                           <td className="px-3 py-2 text-right font-semibold">{brlc(v.receita)}</td>
                         </tr>
                       ))}
@@ -315,7 +338,11 @@ export default function Dashboard({ role, email, initialLocked }) {
                   </table>
                 </div>
               </div>
-            )}
+            ) : vName ? (
+              <div className="mt-5 border border-slate-200 rounded-xl px-4 py-5 text-center text-sm text-slate-500">
+                Nenhuma venda registrada hoje ainda. Conforme as vendas entrarem no Mercado Livre, sincronize para atualizar.
+              </div>
+            ) : null}
 
             <div className="mt-4">
               <Dropzone tone="red" title="Planilha de Estoque (Upseller) — necessária para reposição"
