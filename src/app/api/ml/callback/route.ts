@@ -1,22 +1,23 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase-server";
+import { createAdminClient } from "@/lib/supabase-server";
 
 // GET /api/ml/callback?code=...&state=<user_id>
 // O Mercado Livre redireciona aqui após o usuário autorizar.
-// Trocamos o "code" por access_token + refresh_token e guardamos no banco.
+// IMPORTANTE: como esta requisição vem de um site externo (o ML), o navegador
+// NÃO envia os cookies de sessão do Supabase. Por isso NÃO dá para usar
+// supabase.auth.getUser() aqui — ele viria vazio e o fluxo quebraria.
+// Em vez disso confiamos no "state" (que contém o user.id que nós mesmos
+// enviamos no /authorize) e gravamos o token com o cliente admin (service role).
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const code = searchParams.get("code");
-  const state = searchParams.get("state"); // = user.id
+  const userId = searchParams.get("state"); // = user.id enviado no /authorize
 
-  if (!code) return NextResponse.redirect(new URL("/?ml=erro", req.url));
+  if (!code || !userId) {
+    return NextResponse.redirect(new URL("/?ml=erro_sem_code", req.url));
+  }
 
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user || user.id !== state)
-    return NextResponse.redirect(new URL("/?ml=erro_sessao", req.url));
-
-  // troca o code por tokens (server-side, o secret nunca vai ao navegador)
+  // troca o code por tokens (server-side; o secret nunca vai ao navegador)
   const body = new URLSearchParams({
     grant_type: "authorization_code",
     client_id: process.env.ML_CLIENT_ID!,
@@ -40,15 +41,21 @@ export async function GET(req: Request) {
   const tok = await resp.json();
   const expiresAt = new Date(Date.now() + (tok.expires_in ?? 21600) * 1000).toISOString();
 
-  // upsert: 1 registro de token por usuário
-  await supabase.from("ml_tokens").delete().eq("user_id", user.id);
-  await supabase.from("ml_tokens").insert({
-    user_id: user.id,
+  // grava o token com o cliente admin (ignora RLS, funciona sem cookie de sessão)
+  const admin = createAdminClient();
+  await admin.from("ml_tokens").delete().eq("user_id", userId);
+  const { error } = await admin.from("ml_tokens").insert({
+    user_id: userId,
     ml_user_id: tok.user_id ?? null,
     access_token: tok.access_token,
     refresh_token: tok.refresh_token,
     expires_at: expiresAt,
   });
+
+  if (error) {
+    console.error("Supabase insert error:", error.message);
+    return NextResponse.redirect(new URL("/?ml=erro_gravar", req.url));
+  }
 
   return NextResponse.redirect(new URL("/?ml=conectado", req.url));
 }
