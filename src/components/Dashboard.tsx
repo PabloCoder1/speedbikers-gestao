@@ -4,6 +4,7 @@ import * as XLSX from "xlsx";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase-browser";
 import { analyze, readSheetSmart, mlRowsToVendas, brl, brlc, dstr } from "@/lib/analysis";
+
 import {
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer,
@@ -13,6 +14,7 @@ import {
   RefreshCw, ShoppingCart, Clock, Tag, ChevronDown, ChevronRight, Layers, Eye,
   Lock, Unlock, LogOut, Cloud, FileSpreadsheet, ShieldAlert, Warehouse, Menu,
 } from "lucide-react";
+import EstoqueScreen from "./EstoqueScreen";
 
 // ---------------- UI atoms ----------------
 const CLS_COLOR = { A: "#1A3FB0", B: "#FFC107", C: "#B8B2A6" };
@@ -789,16 +791,7 @@ export default function Dashboard({ role, email, initialLocked }) {
         )}
 
         {/* ================= TELA: ESTOQUE (independente de vendas) ================= */}
-        {tela === "estoque" && (
-          <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center">
-            <Warehouse size={40} className="mx-auto text-slate-300 mb-3" />
-            <div className="font-bold text-slate-800 mb-1">Controle de estoque em construção</div>
-            <p className="text-sm text-slate-500 max-w-md mx-auto">
-              As tabelas de produtos já estão no banco. A próxima etapa conecta esta tela ao estoque real —
-              edição de marcas, quantidades e baixa automática nas vendas.
-            </p>
-          </div>
-        )}
+        {tela === "estoque" && <EstoqueScreen />}
         </div>
       </main>
     </div>
