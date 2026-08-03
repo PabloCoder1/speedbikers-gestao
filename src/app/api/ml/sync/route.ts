@@ -78,14 +78,24 @@ export async function GET(req: Request) {
     const data = await r.json();
     const results = data.results ?? [];
     for (const o of results) {
-      for (const it of o.order_items ?? []) {
+      // ignora pedidos cancelados (o painel do ML não os soma no faturamento)
+      if (o.status === "cancelled") continue;
+      const itens = o.order_items ?? [];
+      // soma dos itens (preço cheio do anúncio × qtd) — base para ratear o total do pedido
+      const somaItens = itens.reduce((s: number, it: any) => s + (it.unit_price ?? 0) * (it.quantity ?? 0), 0);
+      // valor total do pedido conforme o ML (inclui o que o painel mostra)
+      const totalPedido = o.total_amount ?? o.paid_amount ?? somaItens;
+      for (const it of itens) {
+        const valorItem = (it.unit_price ?? 0) * (it.quantity ?? 0);
+        // rateia o total do pedido proporcionalmente entre os itens (casa com o painel do ML)
+        const receitaItem = somaItens > 0 ? totalPedido * (valorItem / somaItens) : valorItem;
         rows.push({
           sku: it.item?.seller_sku || it.item?.seller_custom_field || String(it.item?.id || ""),
           mlb: it.item?.id || "",
           titulo: it.item?.title || "",
           data: o.date_created,
           unidades: it.quantity ?? 0,
-          receita: (it.unit_price ?? 0) * (it.quantity ?? 0),
+          receita: receitaItem,
           preco: it.unit_price ?? 0,
           oficial: "",
         });

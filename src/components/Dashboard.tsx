@@ -11,7 +11,7 @@ import {
 import {
   Upload, TrendingDown, TrendingUp, Package, AlertTriangle, DollarSign, Boxes,
   RefreshCw, ShoppingCart, Clock, Tag, ChevronDown, ChevronRight, Layers, Eye,
-  Lock, Unlock, LogOut, Cloud, FileSpreadsheet, ShieldAlert,
+  Lock, Unlock, LogOut, Cloud, FileSpreadsheet, ShieldAlert, Warehouse, Menu,
 } from "lucide-react";
 
 // ---------------- UI atoms ----------------
@@ -216,50 +216,90 @@ export default function Dashboard({ role, email, initialLocked }) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900" style={{ fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif" }}>
-      {/* header */}
-      <div className="bg-slate-900 text-white px-7 py-5">
-        <div className="flex items-baseline gap-3 flex-wrap max-w-7xl mx-auto">
-          <div className="text-2xl font-extrabold" style={{ fontFamily: "Georgia, serif" }}>
-            Speed Bikers <span className="text-amber-400">·</span> Gestão de Compras
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex" style={{ fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif" }}>
+      {/* ===== MENU LATERAL FIXO ===== */}
+      <aside className="w-60 shrink-0 bg-white border-r border-slate-200 flex flex-col fixed h-screen">
+        <div className="px-5 py-5 border-b border-slate-100">
+          <div className="text-lg font-extrabold leading-tight" style={{ fontFamily: "Georgia, serif" }}>
+            Speed Bikers
           </div>
-          <div className="text-sm text-slate-300">Saúde dos produtos, curva ABC e reposição · Mercado Livre</div>
-        </div>
-      </div>
-
-      <div className="max-w-7xl mx-auto px-5 py-6 pb-20">
-        {/* ===== barra: fonte de dados + admin ===== */}
-        <div className="flex items-center justify-between gap-3 flex-wrap mb-5">
-          <div className="flex items-center bg-white border border-slate-200 rounded-xl p-1">
-            <button onClick={() => setFonte("upload")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold ${fonte === "upload" ? "bg-slate-900 text-white" : "text-slate-600"}`}>
-              <FileSpreadsheet size={16} /> Upload de Excel
-            </button>
-            <button onClick={() => setFonte("ml")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold ${fonte === "ml" ? "bg-slate-900 text-white" : "text-slate-600"}`}>
-              <Cloud size={16} /> Mercado Livre (tempo real)
-            </button>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-500 hidden sm:block">{email} · {role === "admin" ? "administrador" : "usuário"}</span>
-            {role === "admin" && (
-              <button onClick={toggleLock} disabled={lockBusy}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-bold border ${locked ? "bg-red-600 text-white border-red-600" : "bg-white text-red-600 border-red-300"}`}>
-                {locked ? <><Unlock size={15} /> Desbloquear app</> : <><Lock size={15} /> Bloquear app</>}
-              </button>
-            )}
-            <button onClick={logout} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-bold text-slate-600 border border-slate-200 bg-white">
-              <LogOut size={15} /> Sair
-            </button>
-          </div>
+          <div className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold mt-0.5">Gestão de Compras</div>
         </div>
 
-        {role === "admin" && locked && (
-          <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm mb-5 flex items-center gap-2">
-            <ShieldAlert size={16} /> O app está <b>bloqueado</b> para os demais usuários. Você (admin) continua com acesso.
-          </div>
-        )}
+        {/* navegação principal */}
+        <nav className="px-3 py-4 flex-1">
+          <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold px-3 mb-2">Menu</div>
+          {[
+            ["dashboard", "Dashboard", Layers],
+            ["comprar", "Comprar agora", ShoppingCart],
+            ["estoque", "Estoque", Warehouse],
+          ].map(([k, l, Ic]: any) => (
+            <button key={k} onClick={() => setTela(k)}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold mb-1 transition text-left
+                ${tela === k ? "bg-sbblue text-white" : "text-slate-600 hover:bg-slate-100"}`}>
+              <Ic size={17} /> {l}
+              {k === "comprar" && R && !R.error && R.kpis.nRecomendados > 0 && (
+                <span className={`ml-auto text-[11px] font-extrabold px-1.5 py-0.5 rounded-full ${tela === k ? "bg-white text-sbblue" : "bg-red-100 text-red-700"}`}>{R.kpis.nRecomendados}</span>
+              )}
+            </button>
+          ))}
 
+          <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold px-3 mb-2 mt-6">Fonte de dados</div>
+          <button onClick={() => setFonte("upload")}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold mb-1 transition text-left
+              ${fonte === "upload" ? "bg-slate-100 text-slate-900" : "text-slate-600 hover:bg-slate-100"}`}>
+            <FileSpreadsheet size={17} /> Upload de Excel
+          </button>
+          <button onClick={() => setFonte("ml")}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold transition text-left
+              ${fonte === "ml" ? "bg-slate-100 text-slate-900" : "text-slate-600 hover:bg-slate-100"}`}>
+            <Cloud size={17} /> Mercado Livre
+          </button>
+        </nav>
+
+        {/* rodapé do menu: usuário + ações */}
+        <div className="px-3 py-4 border-t border-slate-100">
+          <div className="px-3 mb-2">
+            <div className="text-xs font-semibold text-slate-700 truncate">{email}</div>
+            <div className="text-[11px] text-slate-400">{role === "admin" ? "Administrador" : "Usuário"}</div>
+          </div>
+          {role === "admin" && (
+            <button onClick={toggleLock} disabled={lockBusy}
+              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-bold mb-1 border transition
+                ${locked ? "bg-sbred text-white border-sbred" : "bg-white text-sbred border-red-200 hover:bg-red-50"}`}>
+              {locked ? <><Unlock size={15} /> Desbloquear</> : <><Lock size={15} /> Bloquear app</>}
+            </button>
+          )}
+          <button onClick={logout}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-bold text-slate-500 hover:bg-slate-100 transition">
+            <LogOut size={15} /> Sair
+          </button>
+        </div>
+      </aside>
+
+      {/* ===== CONTEÚDO ===== */}
+      <main className="flex-1 ml-60 min-h-screen">
+        <div className="max-w-6xl mx-auto px-8 py-8 pb-20">
+          {/* título da tela atual */}
+          <div className="mb-6">
+            <h1 className="text-2xl font-bold" style={{ fontFamily: "Georgia, serif" }}>
+              {tela === "dashboard" ? "Dashboard" : tela === "comprar" ? "Comprar agora" : "Estoque"}
+            </h1>
+            <p className="text-sm text-slate-500 mt-0.5">
+              {tela === "dashboard" ? "Curva ABC, alertas e saúde dos produtos" :
+               tela === "comprar" ? "Recomendações de reposição por urgência" :
+               "Controle de estoque, marcas e custos"}
+            </p>
+          </div>
+
+          {role === "admin" && locked && (
+            <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm mb-5 flex items-center gap-2">
+              <ShieldAlert size={16} /> O app está <b>bloqueado</b> para os demais usuários. Você (admin) continua com acesso.
+            </div>
+          )}
+
+        {/* fontes de dados só nas telas que usam vendas */}
+        {tela !== "estoque" && (<>
         {/* ===== fonte: upload ===== */}
         {fonte === "upload" && (
           <div className="flex gap-4 flex-wrap mb-6">
@@ -352,6 +392,7 @@ export default function Dashboard({ role, email, initialLocked }) {
             </div>
           </div>
         )}
+        </>)}
 
         {busy && <div className="text-blue-700 font-semibold mb-3 flex items-center gap-2"><RefreshCw size={16} className="animate-spin" /> Processando…</div>}
         {err && <div className="text-red-600 font-semibold mb-3">{err}</div>}
@@ -363,7 +404,7 @@ export default function Dashboard({ role, email, initialLocked }) {
         )}
         {R?.error && <div className="text-red-600 font-semibold">Erro: {R.error}</div>}
 
-        {R && !R.error && (
+        {R && !R.error && tela !== "estoque" && (
           <>
             {/* KPIs */}
             <div className="flex gap-4 flex-wrap mb-4">
@@ -378,20 +419,6 @@ export default function Dashboard({ role, email, initialLocked }) {
                 Sem planilha de estoque: ruptura, saldo e reposição ficam indisponíveis. Alertas usam apenas queda de velocidade e troca de título.
               </div>
             )}
-
-            {/* navegação entre telas */}
-            <div className="flex gap-2 mb-6 bg-white border border-slate-200 rounded-xl p-1.5 w-fit">
-              {(([["dashboard", "Dashboard", Layers], ["comprar", `Comprar agora`, ShoppingCart]]) as any[]).map(([k, l, Ic]) => (
-                <button key={k} onClick={() => setTela(k)}
-                  className={`flex items-center gap-2 px-5 py-2 rounded-lg text-[14px] font-bold transition
-                    ${tela === k ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"}`}>
-                  <Ic size={16} /> {l}
-                  {k === "comprar" && R.kpis.nRecomendados > 0 && (
-                    <span className={`text-[11px] font-extrabold px-1.5 py-0.5 rounded-full ${tela === k ? "bg-white text-slate-900" : "bg-red-100 text-red-700"}`}>{R.kpis.nRecomendados}</span>
-                  )}
-                </button>
-              ))}
-            </div>
 
             {tela === "dashboard" && (<>
             {/* ABC section */}
@@ -760,7 +787,20 @@ export default function Dashboard({ role, email, initialLocked }) {
             })()}
           </>
         )}
-      </div>
+
+        {/* ================= TELA: ESTOQUE (independente de vendas) ================= */}
+        {tela === "estoque" && (
+          <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center">
+            <Warehouse size={40} className="mx-auto text-slate-300 mb-3" />
+            <div className="font-bold text-slate-800 mb-1">Controle de estoque em construção</div>
+            <p className="text-sm text-slate-500 max-w-md mx-auto">
+              As tabelas de produtos já estão no banco. A próxima etapa conecta esta tela ao estoque real —
+              edição de marcas, quantidades e baixa automática nas vendas.
+            </p>
+          </div>
+        )}
+        </div>
+      </main>
     </div>
   );
 }
