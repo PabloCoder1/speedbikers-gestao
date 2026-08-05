@@ -90,6 +90,7 @@ export async function GET(req: Request) {
         // rateia o total do pedido proporcionalmente entre os itens (casa com o painel do ML)
         const receitaItem = somaItens > 0 ? totalPedido * (valorItem / somaItens) : valorItem;
         rows.push({
+          order_id: String(o.id || ""),
           sku: it.item?.seller_sku || it.item?.seller_custom_field || String(it.item?.id || ""),
           mlb: it.item?.id || "",
           titulo: it.item?.title || "",

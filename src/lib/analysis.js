@@ -113,16 +113,43 @@ export function analyze(vendasRaw, estoqueRaw, opts) {
   }
   const diasMetade = days / 2;
 
-  // ---- stock: last "Novo Estoque Atual" per SKU ----
-  const E = (estoqueRaw || []).map((r) => ({
-    sku: r["SKU"] != null ? String(r["SKU"]).trim() : null,
-    dt: parseEstoqueDate(r["Tempo"]),
-    atual: num(r["Novo Estoque Atual"]),
-  })).filter((r) => r.sku && r.dt);
-  E.sort((a, b) => a.dt - b.dt);
+  // ---- stock: Supabase (produtos) por padrão; planilha do Upseller como reserva ----
+  const { produtosSupabase } = opts;
   const saldo = new Map();
-  for (const r of E) if (!isNaN(r.atual)) saldo.set(r.sku, r.atual);
-  const hasStock = E.length > 0;
+  const leadPorSku = new Map();   // lead time por SKU (vindo da marca no Supabase)
+  const marcaPorSku = new Map();  // marca por SKU
+  let hasStock = false;
+  let fonteEstoque = "nenhuma";
+
+  if (produtosSupabase && produtosSupabase.length > 0) {
+    // marcas importadas => 90 dias; demais => 15 dias
+    const IMPORTADOS = new Set(["off racer", "navetec"]);
+    for (const p of produtosSupabase) {
+      const sku = p.sku != null ? String(p.sku).trim() : null;
+      if (!sku) continue;
+      const q = num(p.quantidade);
+      if (!isNaN(q)) saldo.set(sku, q);
+      const marca = p.marca ? String(p.marca).trim() : "";
+      marcaPorSku.set(sku, marca);
+      // lead: usa regra por marca (importado 90, resto 15); respeita lead_time do produto se vier
+      const marcaNorm = marca.toLowerCase();
+      const leadRegra = IMPORTADOS.has(marcaNorm) ? 90 : 15;
+      leadPorSku.set(sku, leadRegra);
+    }
+    hasStock = true;
+    fonteEstoque = "supabase";
+  } else {
+    // reserva: planilha do Upseller (último "Novo Estoque Atual" por SKU)
+    const E = (estoqueRaw || []).map((r) => ({
+      sku: r["SKU"] != null ? String(r["SKU"]).trim() : null,
+      dt: parseEstoqueDate(r["Tempo"]),
+      atual: num(r["Novo Estoque Atual"]),
+    })).filter((r) => r.sku && r.dt);
+    E.sort((a, b) => a.dt - b.dt);
+    for (const r of E) if (!isNaN(r.atual)) saldo.set(r.sku, r.atual);
+    hasStock = E.length > 0;
+    if (hasStock) fonteEstoque = "planilha";
+  }
 
   // enrich each SKU
   const median = (a) => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
@@ -144,8 +171,9 @@ export function analyze(vendasRaw, estoqueRaw, opts) {
     // velocity drop 15v15
     const dropPct = o.unPrior >= 5 ? ((o.unRecent - o.unPrior) / o.unPrior) * 100 : null;
     const queda = dropPct != null && dropPct <= -40;
-    // restock projection
-    let diasZero = null, dataZero = null, dataPedido = null, lead = o.oficial ? leadOff : leadOutro;
+    // restock projection — lead por marca (Supabase) ou regra oficial (planilha)
+    let diasZero = null, dataZero = null, dataPedido = null;
+    let lead = leadPorSku.has(o.sku) ? leadPorSku.get(o.sku) : (o.oficial ? leadOff : leadOutro);
     if (bal != null && runRate > 0) {
       diasZero = bal / runRate;
       dataZero = addDays(maxD, diasZero);
@@ -213,7 +241,7 @@ export function analyze(vendasRaw, estoqueRaw, opts) {
       qtdSugerida = Math.max(0, Math.ceil(alvo - saldoAtual));
     }
 
-    return { ...o, runRate, rrH1, rrH2, tendPct, emCrescimento, emQueda, tendConfiavel, bal, ruptura, trocaTitulo, dropPct, queda, diasZero, dataZero, dataPedido, lead, priceChg, nTitulos: o.titulos.size, titulosArr: [...o.titulos], tituloDiag, qtdSugerida, folgaTotal, rrBase };
+    return { ...o, runRate, rrH1, rrH2, tendPct, emCrescimento, emQueda, tendConfiavel, bal, ruptura, trocaTitulo, dropPct, queda, diasZero, dataZero, dataPedido, lead, priceChg, nTitulos: o.titulos.size, titulosArr: [...o.titulos], tituloDiag, qtdSugerida, folgaTotal, rrBase, marcaEstoque: marcaPorSku.get(o.sku) || "" };
   });
 
   // ---- ABC (both criteria precomputed) ----
@@ -254,6 +282,53 @@ export function analyze(vendasRaw, estoqueRaw, opts) {
   const sucessos = list
     .filter((o) => o.tituloDiag && o.tituloDiag.melhora && o.un >= 3)
     .sort((a, b) => b.tituloDiag.quedaPct - a.tituloDiag.quedaPct);
+
+  // ---- SUGESTÕES DE APRIMORAMENTO DE TÍTULO ----
+  // Aponta produtos que valem testar um novo título, com motivo e prioridade.
+  function sugerirTitulo(titulo, marca) {
+    // heurística simples de melhoria: completa com marca e reforça padrão de busca
+    const t = (titulo || "").trim();
+    const dicas = [];
+    if (t.length < 40) dicas.push("título curto — adicione modelo, ano e compatibilidade");
+    if (marca && !t.toLowerCase().includes(marca.toLowerCase()) && !/manete|999|inativo|ocupado|proje/i.test(marca))
+      dicas.push(`inclua a marca "${marca}" no título`);
+    if (!/\b(20\d{2}|1\d{3})\b/.test(t)) dicas.push("adicione o ano/geração compatível");
+    if (!/(cg|cb|xre|bros|fazer|nmax|pcx|biz|factor|titan|fan|ninja|mt|hornet|xj6)/i.test(t))
+      dicas.push("cite o modelo da moto para aparecer em buscas");
+    return dicas;
+  }
+
+  const sugestoesTitulo = list
+    .map((o) => {
+      const motivos = [];
+      let prioridade = 0;
+      const td = o.tituloDiag;
+      // 1) caiu após uma troca de título de teste
+      if (td && td.alerta && td.causaProvavel === "titulo") {
+        motivos.push({ t: `Caiu ${Math.abs(td.quedaPct).toFixed(0)}% após troca de título`, cor: "vermelho" });
+        prioridade += 100;
+      }
+      // 2) perdeu desempenho (tendência de queda) com base relevante
+      if (o.emQueda && o.un >= 10) {
+        motivos.push({ t: `Vendas desacelerando ${o.tendPct.toFixed(0)}%`, cor: "dourado" });
+        prioridade += 50;
+      }
+      // 3) estoque alto e venda baixa (precisa girar)
+      if (o.bal != null && o.bal >= 50 && o.runRate < 0.3) {
+        motivos.push({ t: "Estoque alto e pouca saída", cor: "azul" });
+        prioridade += 30;
+      }
+      // 4) título curto/incompleto
+      const dicas = sugerirTitulo(o.titulo, o.marcaEstoque);
+      if (dicas.length >= 2 && o.un >= 2) {
+        motivos.push({ t: "Título pode melhorar em busca", cor: "cinza" });
+        prioridade += 10;
+      }
+      return { ...o, motivosTitulo: motivos, prioridadeTitulo: prioridade, dicasTitulo: dicas };
+    })
+    .filter((o) => o.motivosTitulo.length > 0)
+    .sort((a, b) => b.prioridadeTitulo - a.prioridadeTitulo);
+
 
   // compras: tem saldo + run rate; ordenar por urgência (dataPedido mais próxima/vencida)
   const compras = list
@@ -306,8 +381,8 @@ export function analyze(vendasRaw, estoqueRaw, opts) {
   }));
 
   return {
-    list, alertas, sucessos, compras, recomendados, esgotados, abraOlho, chegandoNoLimite,
-    days, minD, maxD, hasStock, coberturaDias, margem,
+    list, alertas, sucessos, sugestoesTitulo, compras, recomendados, esgotados, abraOlho, chegandoNoLimite,
+    days, minD, maxD, hasStock, coberturaDias, margem, fonteEstoque,
     kpis: { totFat, totUn, nRuptura, nProxFim, nSku: list.length, nRecomendados: recomendados.length, nSucessos: sucessos.length, nAbraOlho: abraOlho.length, nEsgotados: esgotados.length },
     abcDistFat: abcDist("classeFat"), abcDistVol: abcDist("classeVol"),
     nOficial: list.filter((o) => o.oficial).length,

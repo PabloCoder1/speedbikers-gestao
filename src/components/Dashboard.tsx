@@ -1,10 +1,10 @@
 "use client";
-import React, { useState, useCallback, useMemo, useRef } from "react";
+import React, { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase-browser";
 import { analyze, readSheetSmart, mlRowsToVendas, brl, brlc, dstr } from "@/lib/analysis";
-
+import EstoqueScreen from "@/components/EstoqueScreen";
 import {
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer,
@@ -14,7 +14,6 @@ import {
   RefreshCw, ShoppingCart, Clock, Tag, ChevronDown, ChevronRight, Layers, Eye,
   Lock, Unlock, LogOut, Cloud, FileSpreadsheet, ShieldAlert, Warehouse, Menu,
 } from "lucide-react";
-import EstoqueScreen from "./EstoqueScreen";
 
 // ---------------- UI atoms ----------------
 const CLS_COLOR = { A: "#1A3FB0", B: "#FFC107", C: "#B8B2A6" };
@@ -127,6 +126,18 @@ export default function Dashboard({ role, email, initialLocked }) {
   const [cobertura, setCobertura] = useState(90); // dias de venda que cada pedido cobre
   const [periodoDias, setPeriodoDias] = useState(30); // filtro de período do ML (0=total)
   const [vendasHoje, setVendasHoje] = useState([]); // vendas de hoje agrupadas por produto
+  const [produtosSupabase, setProdutosSupabase] = useState<any[]>([]); // estoque do banco
+
+  // carrega o estoque do Supabase ao abrir (fonte principal da sugestão de compra)
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch("/api/estoque");
+        const j = await r.json();
+        if (r.ok && j.produtos) setProdutosSupabase(j.produtos);
+      } catch { /* se falhar, cai na planilha */ }
+    })();
+  }, []);
 
   const readFile = useCallback((file, wanted, setRaw, setName) => {
     setErr(""); setBusy(true);
@@ -176,6 +187,29 @@ export default function Dashboard({ role, email, initialLocked }) {
         }
         const lista = [...mapa.values()].sort((a, b) => b.unidades - a.unidades);
         setVendasHoje(lista);
+
+        // ---- baixa automática de estoque (pedidos novos, de hoje em diante) ----
+        try {
+          const pedidos = (j.rows || [])
+            .filter((v: any) => v.order_id && v.sku)
+            .map((v: any) => ({ order_id: v.order_id, sku: v.sku, quantidade: v.unidades, data: v.data }));
+          if (pedidos.length) {
+            const rb = await fetch("/api/baixa", {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ pedidos }),
+            });
+            const jb = await rb.json();
+            if (rb.ok && jb.pedidosDescontados > 0) {
+              setMlMsg(`Sincronizado: ${j.count} itens. Baixa automática: ${jb.itensDescontados} itens descontados de ${jb.pedidosDescontados} pedidos novos.`);
+              // recarrega o estoque do Supabase pra refletir o novo saldo
+              try {
+                const re = await fetch("/api/estoque");
+                const je = await re.json();
+                if (re.ok && je.produtos) setProdutosSupabase(je.produtos);
+              } catch {}
+            }
+          }
+        } catch { /* baixa é best-effort; não bloqueia a sincronização */ }
       }
     } catch (e) { setMlMsg("Falha de rede ao sincronizar."); }
     setMlBusy(false);
@@ -201,9 +235,9 @@ export default function Dashboard({ role, email, initialLocked }) {
 
   const R = useMemo(() => {
     if (!vendasRaw) return null;
-    try { return analyze(vendasRaw, estoqueRaw, { leadOff, leadOutro, coberturaDias: cobertura, margem: 0.2 }); }
+    try { return analyze(vendasRaw, estoqueRaw, { leadOff, leadOutro, coberturaDias: cobertura, margem: 0.2, produtosSupabase }); }
     catch (ex) { return { error: ex.message }; }
-  }, [vendasRaw, estoqueRaw, leadOff, leadOutro, cobertura]);
+  }, [vendasRaw, estoqueRaw, leadOff, leadOutro, cobertura, produtosSupabase]);
 
   const abcDist = R && !R.error ? (abcMode === "fat" ? R.abcDistFat : R.abcDistVol) : [];
   const classeKey = abcMode === "fat" ? "classeFat" : "classeVol";
@@ -234,6 +268,7 @@ export default function Dashboard({ role, email, initialLocked }) {
           {[
             ["dashboard", "Dashboard", Layers],
             ["comprar", "Comprar agora", ShoppingCart],
+            ["aprimorar", "Sugestões de aprimoramento", TrendingUp],
             ["estoque", "Estoque", Warehouse],
           ].map(([k, l, Ic]: any) => (
             <button key={k} onClick={() => setTela(k)}
@@ -285,11 +320,12 @@ export default function Dashboard({ role, email, initialLocked }) {
           {/* título da tela atual */}
           <div className="mb-6">
             <h1 className="text-2xl font-bold" style={{ fontFamily: "Georgia, serif" }}>
-              {tela === "dashboard" ? "Dashboard" : tela === "comprar" ? "Comprar agora" : "Estoque"}
+              {tela === "dashboard" ? "Dashboard" : tela === "comprar" ? "Comprar agora" : tela === "aprimorar" ? "Sugestões de aprimoramento" : "Estoque"}
             </h1>
             <p className="text-sm text-slate-500 mt-0.5">
               {tela === "dashboard" ? "Curva ABC, alertas e saúde dos produtos" :
                tela === "comprar" ? "Recomendações de reposição por urgência" :
+               tela === "aprimorar" ? "Produtos que valem testar um novo título" :
                "Controle de estoque, marcas e custos"}
             </p>
           </div>
@@ -301,7 +337,7 @@ export default function Dashboard({ role, email, initialLocked }) {
           )}
 
         {/* fontes de dados só nas telas que usam vendas */}
-        {tela !== "estoque" && (<>
+        {(tela === "dashboard" || tela === "comprar") && (<>
         {/* ===== fonte: upload ===== */}
         {fonte === "upload" && (
           <div className="flex gap-4 flex-wrap mb-6">
@@ -406,7 +442,7 @@ export default function Dashboard({ role, email, initialLocked }) {
         )}
         {R?.error && <div className="text-red-600 font-semibold">Erro: {R.error}</div>}
 
-        {R && !R.error && tela !== "estoque" && (
+        {R && !R.error && (tela === "dashboard" || tela === "comprar") && (
           <>
             {/* KPIs */}
             <div className="flex gap-4 flex-wrap mb-4">
@@ -418,7 +454,7 @@ export default function Dashboard({ role, email, initialLocked }) {
 
             {!R.hasStock && (
               <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-4 py-3 text-sm mb-5">
-                Sem planilha de estoque: ruptura, saldo e reposição ficam indisponíveis. Alertas usam apenas queda de velocidade e troca de título.
+                Sem estoque disponível: ruptura, saldo e reposição ficam indisponíveis. Cadastre produtos na tela Estoque ou suba a planilha do Upseller.
               </div>
             )}
 
@@ -792,6 +828,63 @@ export default function Dashboard({ role, email, initialLocked }) {
 
         {/* ================= TELA: ESTOQUE (independente de vendas) ================= */}
         {tela === "estoque" && <EstoqueScreen />}
+
+        {/* ================= TELA: SUGESTÕES DE APRIMORAMENTO ================= */}
+        {tela === "aprimorar" && (
+          !R || R.error || !R.sugestoesTitulo ? (
+            <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center text-slate-500">
+              Sincronize as vendas (aba Mercado Livre) ou suba a planilha de vendas para gerar as sugestões de título.
+            </div>
+          ) : R.sugestoesTitulo.length === 0 ? (
+            <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center text-slate-500">
+              Nenhum produto precisa de ajuste de título no momento. 👍
+            </div>
+          ) : (
+            <div>
+              <div className="bg-white border border-slate-200 rounded-xl p-4 mb-5 text-sm text-slate-600">
+                <b>{R.sugestoesTitulo.length}</b> produtos que valem testar um novo título, priorizados por impacto.
+                Foco em: queda após troca de título, perda de desempenho, estoque parado e títulos incompletos.
+              </div>
+              <div className="space-y-3">
+                {R.sugestoesTitulo.slice(0, 100).map((o: any) => (
+                  <div key={o.sku} className="bg-white border border-slate-200 rounded-xl p-4">
+                    <div className="flex items-start justify-between gap-3 flex-wrap">
+                      <div className="flex-1 min-w-[240px]">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <span className="font-mono text-xs text-slate-500">{o.sku}</span>
+                          {o.marcaEstoque && <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600">{o.marcaEstoque}</span>}
+                          <span className="text-[11px] text-slate-400">{o.un} vendas · {o.runRate.toFixed(2)}/dia</span>
+                        </div>
+                        <div className="text-sm font-semibold text-slate-800">{o.titulo || "—"}</div>
+                      </div>
+                      <div className="flex gap-1 flex-wrap">
+                        {o.motivosTitulo.map((m: any, i: number) => (
+                          <span key={i} className={`text-[11px] font-bold px-2 py-0.5 rounded ${
+                            m.cor === "vermelho" ? "bg-red-100 text-red-700" :
+                            m.cor === "dourado" ? "bg-amber-100 text-amber-800" :
+                            m.cor === "azul" ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-500"}`}>{m.t}</span>
+                        ))}
+                      </div>
+                    </div>
+                    {o.dicasTitulo && o.dicasTitulo.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-slate-100">
+                        <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">Como melhorar o título</div>
+                        <ul className="list-disc pl-5 text-[13px] text-slate-600 space-y-0.5">
+                          {o.dicasTitulo.map((d: string, i: number) => <li key={i}>{d}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                    {o.tituloDiag && o.tituloDiag.tituloAntigo && (
+                      <div className="mt-2 text-[12px] text-slate-500">
+                        Título anterior: <span className="italic">{o.tituloDiag.tituloAntigo}</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        )}
         </div>
       </main>
     </div>
