@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase-browser";
 import { analyze, readSheetSmart, mlRowsToVendas, brl, brlc, dstr } from "@/lib/analysis";
 import EstoqueScreen from "@/components/EstoqueScreen";
+import AprimorarScreen from "@/components/AprimorarScreen";
 import {
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer,
@@ -833,56 +834,10 @@ export default function Dashboard({ role, email, initialLocked }) {
         {tela === "aprimorar" && (
           !R || R.error || !R.sugestoesTitulo ? (
             <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center text-slate-500">
-              Sincronize as vendas (aba Mercado Livre) ou suba a planilha de vendas para gerar as sugestões de título.
-            </div>
-          ) : R.sugestoesTitulo.length === 0 ? (
-            <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center text-slate-500">
-              Nenhum produto precisa de ajuste de título no momento. 👍
+              Sincronize as vendas (aba Mercado Livre) ou suba a planilha de vendas para gerar as sugestões.
             </div>
           ) : (
-            <div>
-              <div className="bg-white border border-slate-200 rounded-xl p-4 mb-5 text-sm text-slate-600">
-                <b>{R.sugestoesTitulo.length}</b> produtos que valem testar um novo título, priorizados por impacto.
-                Foco em: queda após troca de título, perda de desempenho, estoque parado e títulos incompletos.
-              </div>
-              <div className="space-y-3">
-                {R.sugestoesTitulo.slice(0, 100).map((o: any) => (
-                  <div key={o.sku} className="bg-white border border-slate-200 rounded-xl p-4">
-                    <div className="flex items-start justify-between gap-3 flex-wrap">
-                      <div className="flex-1 min-w-[240px]">
-                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <span className="font-mono text-xs text-slate-500">{o.sku}</span>
-                          {o.marcaEstoque && <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600">{o.marcaEstoque}</span>}
-                          <span className="text-[11px] text-slate-400">{o.un} vendas · {o.runRate.toFixed(2)}/dia</span>
-                        </div>
-                        <div className="text-sm font-semibold text-slate-800">{o.titulo || "—"}</div>
-                      </div>
-                      <div className="flex gap-1 flex-wrap">
-                        {o.motivosTitulo.map((m: any, i: number) => (
-                          <span key={i} className={`text-[11px] font-bold px-2 py-0.5 rounded ${
-                            m.cor === "vermelho" ? "bg-red-100 text-red-700" :
-                            m.cor === "dourado" ? "bg-amber-100 text-amber-800" :
-                            m.cor === "azul" ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-500"}`}>{m.t}</span>
-                        ))}
-                      </div>
-                    </div>
-                    {o.dicasTitulo && o.dicasTitulo.length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-slate-100">
-                        <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">Como melhorar o título</div>
-                        <ul className="list-disc pl-5 text-[13px] text-slate-600 space-y-0.5">
-                          {o.dicasTitulo.map((d: string, i: number) => <li key={i}>{d}</li>)}
-                        </ul>
-                      </div>
-                    )}
-                    {o.tituloDiag && o.tituloDiag.tituloAntigo && (
-                      <div className="mt-2 text-[12px] text-slate-500">
-                        Título anterior: <span className="italic">{o.tituloDiag.tituloAntigo}</span>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
+            <AprimorarScreen sugestoes={R.sugestoesTitulo} />
           )
         )}
         </div>

@@ -182,6 +182,7 @@ export function analyze(vendasRaw, estoqueRaw, opts) {
     // price change (recent vs prior window)
     const pr = median(o.precoRecent), pp = median(o.precoPrior);
     const priceChg = pr && pp ? pr - pp : 0;
+    const precoAtual = pr || pp || 0; // preço mais recente pra análise/concorrentes
 
     // ---- título: análise antes/depois da troca ----
     // Descobre quando o título mudou (1ª venda do título mais recente) e compara
@@ -241,7 +242,7 @@ export function analyze(vendasRaw, estoqueRaw, opts) {
       qtdSugerida = Math.max(0, Math.ceil(alvo - saldoAtual));
     }
 
-    return { ...o, runRate, rrH1, rrH2, tendPct, emCrescimento, emQueda, tendConfiavel, bal, ruptura, trocaTitulo, dropPct, queda, diasZero, dataZero, dataPedido, lead, priceChg, nTitulos: o.titulos.size, titulosArr: [...o.titulos], tituloDiag, qtdSugerida, folgaTotal, rrBase, marcaEstoque: marcaPorSku.get(o.sku) || "" };
+    return { ...o, runRate, rrH1, rrH2, tendPct, emCrescimento, emQueda, tendConfiavel, bal, ruptura, trocaTitulo, dropPct, queda, diasZero, dataZero, dataPedido, lead, priceChg, nTitulos: o.titulos.size, titulosArr: [...o.titulos], tituloDiag, qtdSugerida, folgaTotal, rrBase, marcaEstoque: marcaPorSku.get(o.sku) || "", preco: precoAtual };
   });
 
   // ---- ABC (both criteria precomputed) ----
