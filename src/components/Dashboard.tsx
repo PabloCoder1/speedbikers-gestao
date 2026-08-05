@@ -21,16 +21,16 @@ const CLS_COLOR = { A: "#1A3FB0", B: "#FFC107", C: "#B8B2A6" };
 const MOTIVO_COLOR = { vermelho: "bg-red-100 text-red-700", azul: "bg-blue-100 text-blue-700", dourado: "bg-amber-100 text-amber-800", cinza: "bg-slate-100 text-slate-500" };
 
 function KpiCard({ icon: Icon, label, value, sub, tone = "slate" }: any) {
-  const tones = {
-    slate: "text-slate-900", blue: "text-blue-700", red: "text-red-600", amber: "text-amber-600", green: "text-emerald-600",
+  const toneColor: any = {
+    slate: "var(--ink)", blue: "var(--blue)", red: "var(--red)", amber: "var(--orange)", green: "var(--green)",
   };
   return (
-    <div className="flex-1 min-w-[170px] bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-      <div className="flex items-center gap-2 text-slate-500 text-xs font-semibold uppercase tracking-wide">
-        <Icon size={15} /> {label}
+    <div className="flex-1 min-w-[170px] bg-white rounded-xl p-[18px]" style={{ border: "1px solid var(--line)" }}>
+      <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-[0.06em] uppercase" style={{ color: "#7988a0" }}>
+        <Icon size={13} /> {label}
       </div>
-      <div className={`text-3xl font-bold mt-2 ${tones[tone]}`} style={{ fontFamily: "Georgia, serif" }}>{value}</div>
-      {sub && <div className="text-xs text-slate-400 mt-1">{sub}</div>}
+      <div className="font-display text-[27px] font-bold mt-2 leading-none" style={{ color: toneColor[tone] }}>{value}</div>
+      {sub && <div className="text-[11px] mt-1.5" style={{ color: "#8391a8" }}>{sub}</div>}
     </div>
   );
 }
@@ -106,7 +106,7 @@ function ClsFilter({ value, onChange, counts }: any) {
 
 export default function Dashboard({ role, email, initialLocked }) {
   const router = useRouter();
-  const supabase = createClient();
+  const supabase = useMemo(() => (typeof window === "undefined" ? null : createClient()), []);
   const [fonte, setFonte] = useState('upload'); // 'upload' | 'ml'
   const [locked, setLocked] = useState(initialLocked);
   const [lockBusy, setLockBusy] = useState(false);
@@ -230,6 +230,7 @@ export default function Dashboard({ role, email, initialLocked }) {
   }, [locked]);
 
   const logout = useCallback(async () => {
+    if (!supabase) return;
     await supabase.auth.signOut();
     router.push("/login");
   }, [router, supabase]);
@@ -252,87 +253,108 @@ export default function Dashboard({ role, email, initialLocked }) {
     return c;
   };
 
+  const avatarIniciais = (email || "U").slice(0, 2).toUpperCase();
+  const hojeFmt = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "short", year: "numeric" }).toUpperCase().replace(".", "");
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex" style={{ fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif" }}>
+    <div className="min-h-screen flex" style={{ background: "var(--ground)", color: "var(--ink)" }}>
       {/* ===== MENU LATERAL FIXO ===== */}
-      <aside className="w-60 shrink-0 bg-white border-r border-slate-200 flex flex-col fixed h-screen">
-        <div className="px-5 py-5 border-b border-slate-100">
-          <div className="text-lg font-extrabold leading-tight" style={{ fontFamily: "Georgia, serif" }}>
-            Speed Bikers
+      <aside className="w-[260px] shrink-0 bg-white flex flex-col fixed h-screen" style={{ borderRight: "1px solid var(--line)" }}>
+        {/* marca */}
+        <div className="flex items-center gap-2.5 px-6 pt-6 pb-6 mx-1" style={{ borderBottom: "1px solid var(--line)" }}>
+          <div className="grid place-items-center w-8 h-8 rounded-[10px] text-white font-display text-lg" style={{ background: "var(--blue)" }}>S</div>
+          <div className="lowercase">
+            <div className="font-display font-bold text-[17px] leading-none tracking-tight">speed bikers</div>
+            <div className="text-[11px] mt-0.5" style={{ color: "var(--muted)" }}>gestão de compras</div>
           </div>
-          <div className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold mt-0.5">Gestão de Compras</div>
         </div>
 
-        {/* navegação principal */}
-        <nav className="px-3 py-4 flex-1">
-          <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold px-3 mb-2">Menu</div>
-          {[
-            ["dashboard", "Dashboard", Layers],
-            ["comprar", "Comprar agora", ShoppingCart],
-            ["aprimorar", "Sugestões de aprimoramento", TrendingUp],
-            ["estoque", "Estoque", Warehouse],
-          ].map(([k, l, Ic]: any) => (
-            <button key={k} onClick={() => setTela(k)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold mb-1 transition text-left
-                ${tela === k ? "bg-sbblue text-white" : "text-slate-600 hover:bg-slate-100"}`}>
-              <Ic size={17} /> {l}
-              {k === "comprar" && R && !R.error && R.kpis.nRecomendados > 0 && (
-                <span className={`ml-auto text-[11px] font-extrabold px-1.5 py-0.5 rounded-full ${tela === k ? "bg-white text-sbblue" : "bg-red-100 text-red-700"}`}>{R.kpis.nRecomendados}</span>
-              )}
-            </button>
-          ))}
+        {/* conta */}
+        <div className="flex items-center gap-2.5 px-5 py-4">
+          <div className="w-8 h-8 rounded-full grid place-items-center text-[10px] font-bold" style={{ background: "#e8efff", color: "var(--blue)" }}>{avatarIniciais}</div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[13px] font-semibold truncate">{email}</div>
+            <div className="text-[11px]" style={{ color: "var(--muted)" }}>{role === "admin" ? "Administrador" : "Usuário"} · Mercado Livre</div>
+          </div>
+        </div>
 
-          <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold px-3 mb-2 mt-6">Fonte de dados</div>
+        {/* navegação */}
+        <nav className="px-3 flex-1 overflow-y-auto">
+          <div className="text-[10px] font-bold tracking-[0.09em] px-3 mt-3 mb-1.5" style={{ color: "#9aa7bb" }}>OPERAÇÃO</div>
+          {[
+            ["dashboard", "Visão geral", Layers],
+            ["comprar", "Comprar agora", ShoppingCart],
+            ["aprimorar", "Otimizar anúncios", TrendingUp],
+            ["estoque", "Estoque", Warehouse],
+          ].map(([k, l, Ic]: any) => {
+            const ativo = tela === k;
+            return (
+              <button key={k} onClick={() => setTela(k)}
+                className="w-full flex items-center gap-3 px-2.5 py-2.5 rounded-lg text-sm font-semibold my-0.5 text-left transition"
+                style={ativo
+                  ? { background: "var(--blue)", color: "#fff", boxShadow: "0 7px 15px #1e47ba25" }
+                  : { color: "#45526a" }}>
+                <Ic size={18} style={{ color: ativo ? "#fff" : "#71809a" }} /> {l}
+                {k === "comprar" && R && !R.error && R.kpis.nRecomendados > 0 && (
+                  <span className="ml-auto text-[10px] font-bold rounded-full px-1.5 py-0.5"
+                    style={ativo ? { background: "#fff", color: "var(--blue)" } : { background: "#fde3e3", color: "#d72222" }}>{R.kpis.nRecomendados}</span>
+                )}
+              </button>
+            );
+          })}
+
+          <div className="text-[10px] font-bold tracking-[0.09em] px-3 mt-6 mb-1.5" style={{ color: "#9aa7bb" }}>CANAIS</div>
           <button onClick={() => setFonte("upload")}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold mb-1 transition text-left
-              ${fonte === "upload" ? "bg-slate-100 text-slate-900" : "text-slate-600 hover:bg-slate-100"}`}>
-            <FileSpreadsheet size={17} /> Upload de Excel
+            className="w-full flex items-center gap-3 px-2.5 py-2.5 rounded-lg text-sm font-semibold my-0.5 text-left transition"
+            style={fonte === "upload" ? { background: "#eef1f6", color: "var(--ink)" } : { color: "#45526a" }}>
+            <FileSpreadsheet size={18} style={{ color: "#71809a" }} /> Upload de Excel
           </button>
           <button onClick={() => setFonte("ml")}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold transition text-left
-              ${fonte === "ml" ? "bg-slate-100 text-slate-900" : "text-slate-600 hover:bg-slate-100"}`}>
-            <Cloud size={17} /> Mercado Livre
+            className="w-full flex items-center gap-3 px-2.5 py-2.5 rounded-lg text-sm font-semibold my-0.5 text-left transition"
+            style={fonte === "ml" ? { background: "#eef1f6", color: "var(--ink)" } : { color: "#45526a" }}>
+            <Cloud size={18} style={{ color: "#71809a" }} /> Mercado Livre
+            <span className="ml-auto w-[7px] h-[7px] rounded-full" style={{ background: "#18a56d" }} />
           </button>
         </nav>
 
-        {/* rodapé do menu: usuário + ações */}
-        <div className="px-3 py-4 border-t border-slate-100">
-          <div className="px-3 mb-2">
-            <div className="text-xs font-semibold text-slate-700 truncate">{email}</div>
-            <div className="text-[11px] text-slate-400">{role === "admin" ? "Administrador" : "Usuário"}</div>
-          </div>
+        {/* rodapé */}
+        <div className="px-4 py-4 mx-1" style={{ borderTop: "1px solid var(--line)" }}>
           {role === "admin" && (
             <button onClick={toggleLock} disabled={lockBusy}
-              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-bold mb-1 border transition
-                ${locked ? "bg-sbred text-white border-sbred" : "bg-white text-sbred border-red-200 hover:bg-red-50"}`}>
-              {locked ? <><Unlock size={15} /> Desbloquear</> : <><Lock size={15} /> Bloquear app</>}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-bold mb-1.5 border transition"
+              style={locked ? { background: "var(--red)", color: "#fff", borderColor: "var(--red)" } : { background: "#fff", color: "var(--red)", borderColor: "#f0c9c9" }}>
+              {locked ? <><Unlock size={15} /> Desbloquear app</> : <><Lock size={15} /> Bloquear app</>}
             </button>
           )}
           <button onClick={logout}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-bold text-slate-500 hover:bg-slate-100 transition">
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-bold transition hover:bg-slate-50"
+            style={{ color: "var(--muted)" }}>
             <LogOut size={15} /> Sair
           </button>
         </div>
       </aside>
 
       {/* ===== CONTEÚDO ===== */}
-      <main className="flex-1 ml-60 min-h-screen">
-        <div className="max-w-6xl mx-auto px-8 py-8 pb-20">
-          {/* título da tela atual */}
-          <div className="mb-6">
-            <h1 className="text-2xl font-bold" style={{ fontFamily: "Georgia, serif" }}>
-              {tela === "dashboard" ? "Dashboard" : tela === "comprar" ? "Comprar agora" : tela === "aprimorar" ? "Sugestões de aprimoramento" : "Estoque"}
+      <main className="flex-1 ml-[260px] min-h-screen">
+        <div className="max-w-[1280px] mx-auto px-12 py-10 pb-20">
+          {/* cabeçalho da tela */}
+          <div className="mb-7">
+            <p className="text-[10px] font-bold tracking-[0.1em] mb-1.5" style={{ color: "#8090aa" }}>
+              OPERAÇÃO · {hojeFmt}
+            </p>
+            <h1 className="font-display text-[34px] font-bold leading-none mb-1.5">
+              {tela === "dashboard" ? "Visão geral" : tela === "comprar" ? "Comprar agora" : tela === "aprimorar" ? "Otimizar anúncios" : "Estoque"}
             </h1>
-            <p className="text-sm text-slate-500 mt-0.5">
-              {tela === "dashboard" ? "Curva ABC, alertas e saúde dos produtos" :
-               tela === "comprar" ? "Recomendações de reposição por urgência" :
-               tela === "aprimorar" ? "Produtos que valem testar um novo título" :
-               "Controle de estoque, marcas e custos"}
+            <p className="text-sm" style={{ color: "var(--muted)" }}>
+              {tela === "dashboard" ? "O que precisa da sua atenção hoje." :
+               tela === "comprar" ? "Reposição calculada pela sua demanda e prazo de entrega." :
+               tela === "aprimorar" ? "Oportunidades para melhorar a performance dos anúncios." :
+               "Controle seus produtos, marcas e prazos de reposição."}
             </p>
           </div>
 
           {role === "admin" && locked && (
-            <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm mb-5 flex items-center gap-2">
+            <div className="rounded-xl px-4 py-3 text-sm mb-5 flex items-center gap-2" style={{ background: "#fff0ef", border: "1px solid #f5c9c7", color: "#c72f2f" }}>
               <ShieldAlert size={16} /> O app está <b>bloqueado</b> para os demais usuários. Você (admin) continua com acesso.
             </div>
           )}

@@ -99,19 +99,19 @@ export default function EstoqueScreen() {
       <div className="grid sm:grid-cols-4 gap-3 mb-5">
         <div className="bg-white border border-slate-200 rounded-xl p-4">
           <div className="flex items-center gap-1.5 text-slate-400 text-xs font-semibold uppercase tracking-wide"><Package size={14} /> Produtos</div>
-          <div className="text-2xl font-bold mt-1" style={{ fontFamily: "Georgia, serif" }}>{resumo.nProdutos.toLocaleString("pt-BR")}</div>
+          <div className="text-2xl font-bold mt-1 font-display">{resumo.nProdutos.toLocaleString("pt-BR")}</div>
         </div>
         <div className="bg-white border border-slate-200 rounded-xl p-4">
           <div className="flex items-center gap-1.5 text-slate-400 text-xs font-semibold uppercase tracking-wide"><Warehouse size={14} /> Itens em estoque</div>
-          <div className="text-2xl font-bold mt-1" style={{ fontFamily: "Georgia, serif" }}>{resumo.totalItens.toLocaleString("pt-BR")}</div>
+          <div className="text-2xl font-bold mt-1 font-display">{resumo.totalItens.toLocaleString("pt-BR")}</div>
         </div>
         <div className="bg-white border border-slate-200 rounded-xl p-4">
           <div className="flex items-center gap-1.5 text-slate-400 text-xs font-semibold uppercase tracking-wide"><DollarSign size={14} /> Valor em estoque</div>
-          <div className="text-2xl font-bold mt-1 text-sbblue" style={{ fontFamily: "Georgia, serif" }}>{brl(resumo.valor)}</div>
+          <div className="text-2xl font-bold mt-1 text-sbblue font-display">{brl(resumo.valor)}</div>
         </div>
         <div className="bg-white border border-slate-200 rounded-xl p-4">
           <div className="flex items-center gap-1.5 text-slate-400 text-xs font-semibold uppercase tracking-wide"><Tag size={14} /> Sem marca</div>
-          <div className="text-2xl font-bold mt-1 text-amber-600" style={{ fontFamily: "Georgia, serif" }}>{resumo.semMarca.toLocaleString("pt-BR")}</div>
+          <div className="text-2xl font-bold mt-1 text-amber-600 font-display">{resumo.semMarca.toLocaleString("pt-BR")}</div>
         </div>
       </div>
 

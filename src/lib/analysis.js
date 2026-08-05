@@ -304,11 +304,32 @@ export function analyze(vendasRaw, estoqueRaw, opts) {
       const motivos = [];
       let prioridade = 0;
       const td = o.tituloDiag;
-      // 1) caiu após uma troca de título de teste
-      if (td && td.alerta && td.causaProvavel === "titulo") {
-        motivos.push({ t: `Caiu ${Math.abs(td.quedaPct).toFixed(0)}% após troca de título`, cor: "vermelho" });
-        prioridade += 100;
+
+      // ---- carência pós-troca de título (detecção automática) ----
+      // Se o título mudou recentemente, damos 7 dias antes de reavaliar.
+      let emCarencia = false, ajusteReavaliado = null;
+      if (td && td.dtTroca) {
+        const diasDesdeTroca = (maxD - td.dtTroca) / 86400000;
+        if (diasDesdeTroca < 7) {
+          emCarencia = true; // trocou faz pouco: sai da lista, aguarda resultado
+        } else if (diasDesdeTroca >= 7) {
+          // já passou a carência: avalia se o novo título ajudou
+          ajusteReavaliado = td.quedaPct >= 15 ? "melhorou" : (td.quedaPct <= -15 ? "piorou" : "sem_efeito");
+        }
       }
+      // Em carência = não aparece nas sugestões (aguardando os 7 dias)
+      if (emCarencia) return null;
+
+      // 1) o ajuste de título NÃO surtiu efeito depois de 7 dias -> volta sinalizado
+      if (ajusteReavaliado === "piorou") {
+        motivos.push({ t: `Título trocado há ${Math.round((maxD - td.dtTroca) / 86400000)}d e caiu ${Math.abs(td.quedaPct).toFixed(0)}%`, cor: "vermelho" });
+        prioridade += 120;
+      } else if (ajusteReavaliado === "sem_efeito") {
+        motivos.push({ t: "Troca de título não melhorou o desempenho", cor: "dourado" });
+        prioridade += 60;
+      }
+      // (se "melhorou", não empurra motivo de título — o ajuste deu certo)
+
       // 2) perdeu desempenho (tendência de queda) com base relevante
       if (o.emQueda && o.un >= 10) {
         motivos.push({ t: `Vendas desacelerando ${o.tendPct.toFixed(0)}%`, cor: "dourado" });
@@ -325,9 +346,9 @@ export function analyze(vendasRaw, estoqueRaw, opts) {
         motivos.push({ t: "Título pode melhorar em busca", cor: "cinza" });
         prioridade += 10;
       }
-      return { ...o, motivosTitulo: motivos, prioridadeTitulo: prioridade, dicasTitulo: dicas };
+      return { ...o, motivosTitulo: motivos, prioridadeTitulo: prioridade, dicasTitulo: dicas, ajusteReavaliado };
     })
-    .filter((o) => o.motivosTitulo.length > 0)
+    .filter((o) => o && o.motivosTitulo.length > 0)
     .sort((a, b) => b.prioridadeTitulo - a.prioridadeTitulo);
 
 

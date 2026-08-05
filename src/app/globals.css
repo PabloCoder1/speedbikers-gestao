@@ -1,5 +1,34 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-html, body { background: #f8fafc; }
+:root {
+  --ink: #16233a;
+  --muted: #6b7a93;
+  --line: #e6eaf0;
+  --ground: #f6f8fb;
+  --blue: #1e47ba;
+  --navy: #112a5d;
+  --red: #dc3434;
+  --orange: #e8890b;
+  --green: #059669;
+}
+
+html, body {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+.font-display {
+  font-family: 'Space Grotesk', 'Inter', sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.text-brand { color: var(--blue); }
+.bg-brand { background: var(--blue); }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: #d3dae5; border-radius: 8px; border: 2px solid var(--ground); }
+::-webkit-scrollbar-thumb:hover { background: #b9c3d3; }

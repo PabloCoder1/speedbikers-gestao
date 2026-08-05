@@ -1,12 +1,12 @@
 "use client";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase-browser";
 import { LogIn, UserPlus } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
-  const supabase = createClient();
+  const supabase = useMemo(() => (typeof window === "undefined" ? null : createClient()), []);
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -14,6 +14,7 @@ export default function LoginPage() {
   const [busy, setBusy] = useState(false);
 
   async function submit() {
+    if (!supabase) return;
     setBusy(true); setMsg("");
     if (mode === "login") {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -46,7 +47,7 @@ export default function LoginPage() {
 
         {msg && <div className="text-sm mb-4 text-slate-700 bg-slate-100 rounded-lg px-3 py-2">{msg}</div>}
 
-        <button onClick={submit} disabled={busy}
+        <button onClick={submit} disabled={busy || !supabase}
           className="w-full bg-sbblue text-white font-bold rounded-lg py-2.5 flex items-center justify-center gap-2 disabled:opacity-60">
           {mode === "login" ? <><LogIn size={18} /> Entrar</> : <><UserPlus size={18} /> Criar conta</>}
         </button>

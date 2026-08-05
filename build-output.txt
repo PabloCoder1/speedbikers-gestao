@@ -1,0 +1,37 @@
+﻿Ôû▓ Next.js 16.2.12 (Turbopack)
+
+  Creating an optimized production build ...
+Ô£ô Compiled successfully in 6.6s
+  Running TypeScript ...
+  Finished TypeScript in 3.3s ...
+  Collecting page data using 11 workers ...
+  Generating static pages using 11 workers (0/13) ...
+  Generating static pages using 11 workers (3/13) 
+  Generating static pages using 11 workers (6/13) 
+  Generating static pages using 11 workers (9/13) 
+node : Error occurred prerendering page "/login". Read more: 
+https://nextjs.org/docs/messages/prerender-error
+No linha:1 caractere:60
++ ... rs-gestao'; node .\node_modules\next\dist\bin\next build 2>&1 | Out-F ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Error occurred ...prerender-error 
+   :String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Error: @supabase/ssr: Your project's URL and API key are required to create a 
+Supabase client!
+
+Check your Supabase project's API settings to find these values
+
+https://supabase.com/dashboard/project/_/settings/api
+    at <unknown> (https://supabase.com/dashboard/project/_/settings/api)
+    at <unknown> (C:\Users\User\Downloads\speedbikers-gestao\.next\server\chunk
+s\ssr\_00wy84y._.js:45:30)
+    at <unknown> (C:\Users\User\Downloads\speedbikers-gestao\.next\server\chunk
+s\ssr\_00wy84y._.js:49:4907)
+    at <unknown> (C:\Users\User\Downloads\speedbikers-gestao\.next\server\chunk
+s\ssr\src_app_login_page_tsx_0yrgg2z._.js:1:619) {
+  digest: '1286063637'
+}
+Export encountered an error on /login/page: /login, exiting the build.
+Ô¿» Next.js build worker exited with code: 1 and signal: null
