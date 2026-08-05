@@ -352,7 +352,28 @@ export function analyze(vendasRaw, estoqueRaw, opts) {
     .sort((a, b) => b.prioridadeTitulo - a.prioridadeTitulo);
 
 
-  // compras: tem saldo + run rate; ordenar por urgência (dataPedido mais próxima/vencida)
+  // ---- DESEMPENHO DE TÍTULOS: trocas que deram certo + produtos em queda ----
+  // Cada item traz o veredito por regras: a mudança de desempenho veio do TÍTULO ou do PREÇO?
+  const desempenhoTitulos = list
+    .filter((o) => o.tituloDiag && (o.tituloDiag.melhora || o.tituloDiag.alerta))
+    .map((o) => {
+      const td = o.tituloDiag;
+      const tipo = td.melhora ? "sucesso" : "queda";
+      // veredito por regras: se o preço mudou junto, a causa provável é o preço
+      const causa = td.melhora ? td.causaMelhora : td.causaProvavel;
+      return {
+        sku: o.sku, titulo: o.titulo, marcaEstoque: o.marcaEstoque, un: o.un,
+        tipo, // "sucesso" | "queda"
+        quedaPct: td.quedaPct, // negativo = piorou, positivo = melhorou
+        rrA: td.rrA, rrD: td.rrD,
+        precoA: td.precoA, precoD: td.precoD, precoPct: td.precoPct, precoMudou: td.precoMudou,
+        causa, // "titulo" | "preco"
+        tituloAntigo: td.tituloAntigo, tituloNovo: td.tituloNovo,
+        dtTroca: td.dtTroca,
+      };
+    })
+    .sort((a, b) => Math.abs(b.quedaPct) - Math.abs(a.quedaPct));
+
   const compras = list
     .filter((o) => o.bal != null && o.runRate > 0)
     .map((o) => {
@@ -403,7 +424,7 @@ export function analyze(vendasRaw, estoqueRaw, opts) {
   }));
 
   return {
-    list, alertas, sucessos, sugestoesTitulo, compras, recomendados, esgotados, abraOlho, chegandoNoLimite,
+    list, alertas, sucessos, sugestoesTitulo, desempenhoTitulos, compras, recomendados, esgotados, abraOlho, chegandoNoLimite,
     days, minD, maxD, hasStock, coberturaDias, margem, fonteEstoque,
     kpis: { totFat, totUn, nRuptura, nProxFim, nSku: list.length, nRecomendados: recomendados.length, nSucessos: sucessos.length, nAbraOlho: abraOlho.length, nEsgotados: esgotados.length },
     abcDistFat: abcDist("classeFat"), abcDistVol: abcDist("classeVol"),

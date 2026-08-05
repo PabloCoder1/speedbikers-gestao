@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase-browser";
 import { analyze, readSheetSmart, mlRowsToVendas, brl, brlc, dstr } from "@/lib/analysis";
 import EstoqueScreen from "@/components/EstoqueScreen";
 import AprimorarScreen from "@/components/AprimorarScreen";
+import DesempenhoTitulos from "@/components/DesempenhoTitulos";
 import {
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer,
@@ -13,7 +14,7 @@ import {
 import {
   Upload, TrendingDown, TrendingUp, Package, AlertTriangle, DollarSign, Boxes,
   RefreshCw, ShoppingCart, Clock, Tag, ChevronDown, ChevronRight, Layers, Eye,
-  Lock, Unlock, LogOut, Cloud, FileSpreadsheet, ShieldAlert, Warehouse, Menu,
+  Lock, Unlock, LogOut, Cloud, FileSpreadsheet, ShieldAlert, Warehouse, Menu, Sparkles,
 } from "lucide-react";
 
 // ---------------- UI atoms ----------------
@@ -106,7 +107,7 @@ function ClsFilter({ value, onChange, counts }: any) {
 
 export default function Dashboard({ role, email, initialLocked }) {
   const router = useRouter();
-  const supabase = useMemo(() => (typeof window === "undefined" ? null : createClient()), []);
+  const supabase = createClient();
   const [fonte, setFonte] = useState('upload'); // 'upload' | 'ml'
   const [locked, setLocked] = useState(initialLocked);
   const [lockBusy, setLockBusy] = useState(false);
@@ -230,7 +231,6 @@ export default function Dashboard({ role, email, initialLocked }) {
   }, [locked]);
 
   const logout = useCallback(async () => {
-    if (!supabase) return;
     await supabase.auth.signOut();
     router.push("/login");
   }, [router, supabase]);
@@ -284,7 +284,8 @@ export default function Dashboard({ role, email, initialLocked }) {
           {[
             ["dashboard", "Visão geral", Layers],
             ["comprar", "Comprar agora", ShoppingCart],
-            ["aprimorar", "Otimizar anúncios", TrendingUp],
+            ["desempenho", "Desempenho de títulos", TrendingUp],
+            ["aprimorar", "Otimizar anúncios", Sparkles],
             ["estoque", "Estoque", Warehouse],
           ].map(([k, l, Ic]: any) => {
             const ativo = tela === k;
@@ -343,11 +344,12 @@ export default function Dashboard({ role, email, initialLocked }) {
               OPERAÇÃO · {hojeFmt}
             </p>
             <h1 className="font-display text-[34px] font-bold leading-none mb-1.5">
-              {tela === "dashboard" ? "Visão geral" : tela === "comprar" ? "Comprar agora" : tela === "aprimorar" ? "Otimizar anúncios" : "Estoque"}
+              {tela === "dashboard" ? "Visão geral" : tela === "comprar" ? "Comprar agora" : tela === "desempenho" ? "Desempenho de títulos" : tela === "aprimorar" ? "Otimizar anúncios" : "Estoque"}
             </h1>
             <p className="text-sm" style={{ color: "var(--muted)" }}>
               {tela === "dashboard" ? "O que precisa da sua atenção hoje." :
                tela === "comprar" ? "Reposição calculada pela sua demanda e prazo de entrega." :
+               tela === "desempenho" ? "Trocas de título que deram certo ou derrubaram as vendas — foi o título ou o preço?" :
                tela === "aprimorar" ? "Oportunidades para melhorar a performance dos anúncios." :
                "Controle seus produtos, marcas e prazos de reposição."}
             </p>
@@ -521,207 +523,9 @@ export default function Dashboard({ role, email, initialLocked }) {
               </div>
             </div>
 
-            {/* ALERTAS */}
-            <div className="bg-white rounded-2xl border border-slate-200 mb-6 overflow-hidden">
-              <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100 flex-wrap">
-                <div className="flex items-center gap-2 font-bold text-slate-800">
-                  <TrendingDown size={18} className="text-red-500" /> Alertas — produtos com queda ou risco
-                </div>
-                <div className="ml-auto"><ClsFilter value={fAlertas} onChange={setFAlertas} counts={classCounts(R.alertas)} /></div>
-              </div>
-              {byClass(R.alertas, fAlertas).length === 0 ? (
-                <div className="px-5 py-6 text-slate-500 text-sm">Nenhum alerta relevante nesta curva.</div>
-              ) : (
-                <div className="max-h-[440px] overflow-auto">
-                  <table className="w-full text-[13px]">
-                    <thead className="bg-slate-50 sticky top-0"><tr>
-                      <Th>Classe</Th><Th>SKU</Th><Th>Produto</Th><Th>Motivo</Th>
-                      <Th right>Run rate</Th><Th right>Saldo</Th><Th></Th>
-                    </tr></thead>
-                    <tbody>
-                      {byClass(R.alertas, fAlertas).slice(0, 200).map((o) => (
-                        <React.Fragment key={o.sku}>
-                          <tr className="border-b border-slate-100 hover:bg-slate-50">
-                            <td className="px-3 py-2.5"><ClsBadge c={o[classeKey]} /></td>
-                            <td className="px-3 py-2.5 font-mono text-xs">{o.sku}</td>
-                            <td className="px-3 py-2.5 max-w-[280px] truncate" title={o.titulo}>{o.titulo || "—"}</td>
-                            <td className="px-3 py-2.5">
-                              <div className="flex gap-1 flex-wrap">
-                                {o.motivos.map((m, i) => <span key={i} className={`text-[11px] font-bold px-2 py-0.5 rounded ${MOTIVO_COLOR[m.cor]}`}>{m.t}</span>)}
-                              </div>
-                            </td>
-                            <td className="px-3 py-2.5 text-right font-semibold">{o.runRate.toFixed(2)}/dia</td>
-                            <td className="px-3 py-2.5 text-right">{o.bal == null ? "—" : o.bal}</td>
-                            <td className="px-3 py-2.5 text-right">
-                              {o.trocaTitulo && (
-                                <button onClick={() => setExpand(expand === o.sku ? null : o.sku)} className="text-blue-600">
-                                  {expand === o.sku ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                          {expand === o.sku && o.trocaTitulo && (
-                            <tr className="bg-blue-50/40 border-b border-slate-100">
-                              <td colSpan={7} className="px-4 py-3">
-                                {o.tituloDiag ? (
-                                  <div className="space-y-2">
-                                    <div className="flex items-center gap-2 text-[13px]">
-                                      <Tag size={13} className="text-slate-500" />
-                                      <span className="text-slate-500">Título mudou em</span>
-                                      <span className="font-bold">{dstr(o.tituloDiag.dtTroca)}</span>
-                                    </div>
-                                    <div className="grid sm:grid-cols-2 gap-3 text-[13px]">
-                                      <div className="bg-white rounded-lg border border-slate-200 p-3">
-                                        <div className="text-[11px] uppercase tracking-wide text-slate-400 font-bold mb-1">Antes</div>
-                                        <div className="text-slate-700 mb-1.5">{o.tituloDiag.tituloAntigo}</div>
-                                        <div className="text-slate-500">{o.tituloDiag.rrA.toFixed(2)} vendas/dia · preço {o.tituloDiag.precoA ? brlc(o.tituloDiag.precoA) : "—"}</div>
-                                      </div>
-                                      <div className="bg-white rounded-lg border border-slate-200 p-3">
-                                        <div className="text-[11px] uppercase tracking-wide text-slate-400 font-bold mb-1">Depois</div>
-                                        <div className="text-slate-700 mb-1.5">{o.tituloDiag.tituloNovo}</div>
-                                        <div className="text-slate-500">{o.tituloDiag.rrD.toFixed(2)} vendas/dia · preço {o.tituloDiag.precoD ? brlc(o.tituloDiag.precoD) : "—"}</div>
-                                      </div>
-                                    </div>
-                                    {o.tituloDiag.alerta ? (
-                                      <div className={`rounded-lg px-3 py-2.5 text-[13px] font-semibold ${o.tituloDiag.causaProvavel === "preco" ? "bg-amber-50 text-amber-800 border border-amber-200" : "bg-blue-50 text-blue-800 border border-blue-200"}`}>
-                                        Vendas caíram {Math.abs(o.tituloDiag.quedaPct).toFixed(0)}% após a troca.{" "}
-                                        {o.tituloDiag.causaProvavel === "preco"
-                                          ? `Mas o preço também mudou ${o.tituloDiag.precoPct > 0 ? "+" : ""}${o.tituloDiag.precoPct.toFixed(0)}% no mesmo período — a causa provável é o preço, não o título.`
-                                          : `O preço ficou praticamente estável (${o.tituloDiag.precoPct > 0 ? "+" : ""}${o.tituloDiag.precoPct.toFixed(0)}%), então a troca de título é a causa provável da queda.`}
-                                      </div>
-                                    ) : o.tituloDiag.melhora ? (
-                                      <div className="rounded-lg px-3 py-2.5 text-[13px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                                        Vendas subiram {o.tituloDiag.quedaPct.toFixed(0)}% após a troca.{" "}
-                                        {o.tituloDiag.causaMelhora === "preco"
-                                          ? `Mas o preço caiu ${o.tituloDiag.precoPct.toFixed(0)}% no mesmo período — parte do ganho pode ser do preço, não só do título.`
-                                          : `O preço ficou estável (${o.tituloDiag.precoPct > 0 ? "+" : ""}${o.tituloDiag.precoPct.toFixed(0)}%), então o novo título melhorou a visibilidade e as vendas.`}
-                                      </div>
-                                    ) : (
-                                      <div className="rounded-lg px-3 py-2.5 text-[13px] bg-slate-50 text-slate-600 border border-slate-200">
-                                        Houve troca de título, mas sem variação relevante de vendas ({o.tituloDiag.quedaPct >= 0 ? "+" : ""}{o.tituloDiag.quedaPct.toFixed(0)}%).
-                                      </div>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <>
-                                    <div className="text-xs font-bold text-slate-500 mb-1 flex items-center gap-1"><Tag size={12} /> Títulos usados no período:</div>
-                                    <ul className="list-disc pl-5 text-[13px] space-y-1">
-                                      {o.titulosArr.map((t, i) => <li key={i}>{t}</li>)}
-                                    </ul>
-                                  </>
-                                )}
-                              </td>
-                            </tr>
-                          )}
-                        </React.Fragment>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
 
-            {/* SUCESSOS — troca de título que aumentou vendas */}
-            {R.sucessos.length > 0 && (
-              <div className="bg-white rounded-2xl border border-emerald-200 mb-6 overflow-hidden">
-                <div className="flex items-center gap-2 font-bold text-slate-800 px-5 py-4 border-b border-emerald-100 bg-emerald-50/40">
-                  <TrendingUp size={18} className="text-emerald-600" /> Trocas de título que deram certo
-                  <span className="ml-2 text-xs font-semibold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">{R.sucessos.length}</span>
-                </div>
-                <div className="max-h-[360px] overflow-auto">
-                  <table className="w-full text-[13px]">
-                    <thead className="bg-slate-50 sticky top-0"><tr>
-                      <Th>Classe</Th><Th>SKU</Th><Th>Produto (título atual)</Th>
-                      <Th right>Antes</Th><Th right>Depois</Th><Th right>Ganho</Th>
-                    </tr></thead>
-                    <tbody>
-                      {byClass(R.sucessos, "Todos").slice(0, 100).map((o) => (
-                        <tr key={o.sku} className="border-b border-slate-100 hover:bg-emerald-50/30">
-                          <td className="px-3 py-2.5"><ClsBadge c={o[classeKey]} /></td>
-                          <td className="px-3 py-2.5 font-mono text-xs">{o.sku}</td>
-                          <td className="px-3 py-2.5 max-w-[320px] truncate" title={o.tituloDiag.tituloNovo}>{o.tituloDiag.tituloNovo}</td>
-                          <td className="px-3 py-2.5 text-right text-slate-500">{o.tituloDiag.rrA.toFixed(2)}/dia</td>
-                          <td className="px-3 py-2.5 text-right font-semibold">{o.tituloDiag.rrD.toFixed(2)}/dia</td>
-                          <td className="px-3 py-2.5 text-right font-bold text-emerald-600">+{o.tituloDiag.quedaPct.toFixed(0)}%</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="px-5 py-3 text-xs text-slate-400 border-t border-emerald-100">
-                  Produtos cujas vendas/dia subiram ≥15% depois da troca de título. Clique em um alerta na tabela acima para ver o antes/depois completo com preço.
-                </div>
-              </div>
-            )}
+            {/* seções de alertas, trocas de título e compras agora vivem nas abas Desempenho e Comprar agora */}
 
-            {/* COMPRAS */}
-            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-wrap gap-3">
-                <div className="flex items-center gap-2 font-bold text-slate-800">
-                  <ShoppingCart size={18} className="text-emerald-600" /> Sugestão de compras — reposição
-                </div>
-                <div className="flex items-center gap-4 text-[13px] flex-wrap">
-                  <label className="flex items-center gap-1.5">
-                    <span className="text-slate-500">Cobrir</span>
-                    <input type="number" value={cobertura} onChange={(e) => setCobertura(Math.max(1, +e.target.value))}
-                      className="w-16 border border-slate-300 rounded px-2 py-1 text-right" /> <span className="text-slate-400">dias de venda</span>
-                  </label>
-                  <label className="flex items-center gap-1.5">
-                    <span className="text-slate-500">Lead OffRacer</span>
-                    <input type="number" value={leadOff} onChange={(e) => setLeadOff(Math.max(0, +e.target.value))}
-                      className="w-16 border border-slate-300 rounded px-2 py-1 text-right" /> <span className="text-slate-400">dias</span>
-                  </label>
-                  <label className="flex items-center gap-1.5">
-                    <span className="text-slate-500">Lead outros</span>
-                    <input type="number" value={leadOutro} onChange={(e) => setLeadOutro(Math.max(0, +e.target.value))}
-                      className="w-16 border border-slate-300 rounded px-2 py-1 text-right" /> <span className="text-slate-400">dias</span>
-                  </label>
-                </div>
-              </div>
-              <div className="px-5 py-3 border-b border-slate-100"><ClsFilter value={fCompras} onChange={setFCompras} counts={classCounts(R.compras)} /></div>
-              {byClass(R.compras, fCompras).length === 0 ? (
-                <div className="px-5 py-6 text-slate-500 text-sm">Sem itens de reposição nesta curva.</div>
-              ) : (
-                <div className="max-h-[520px] overflow-auto">
-                  <table className="w-full text-[13px]">
-                    <thead className="bg-slate-50 sticky top-0"><tr>
-                      <Th>Classe</Th><Th>SKU</Th><Th>Produto</Th><Th>Marca</Th>
-                      <Th right>Saldo</Th><Th right>Run rate</Th><Th>Tendência</Th><Th right>Dias p/ acabar</Th>
-                      <Th right>Data ideal do pedido</Th><Th right>Qtd sugerida</Th>
-                    </tr></thead>
-                    <tbody>
-                      {byClass(R.compras, fCompras).slice(0, 300).map((o) => (
-                        <tr key={o.sku} className={`border-b border-slate-100 ${o.vencido || o.bal <= 0 ? "bg-red-50" : o.diasZero <= 15 ? "bg-amber-50" : "hover:bg-slate-50"}`}>
-                          <td className="px-3 py-2.5"><ClsBadge c={o[classeKey]} /></td>
-                          <td className="px-3 py-2.5 font-mono text-xs">{o.sku}</td>
-                          <td className="px-3 py-2.5 max-w-[240px] truncate" title={o.titulo}>{o.titulo || "—"}</td>
-                          <td className="px-3 py-2.5">
-                            <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${o.oficial ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-600"}`}>
-                              {o.oficial ? "OffRacer" : "Outros"}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2.5 text-right font-semibold" style={{ color: o.bal <= 0 ? "#dc2626" : undefined }}>{o.bal}</td>
-                          <td className="px-3 py-2.5 text-right">{o.runRate.toFixed(2)}/dia</td>
-                          <td className="px-3 py-2.5"><TrendBadge o={o} /></td>
-                          <td className="px-3 py-2.5 text-right">{o.diasZero == null ? "—" : o.diasZero <= 0 ? "esgotado" : Math.round(o.diasZero)}</td>
-                          <td className="px-3 py-2.5 text-right font-semibold" style={{ color: o.vencido ? "#dc2626" : o.diasZero <= 15 ? "#d97706" : "#059669" }}>
-                            {o.vencido ? `${dstr(o.dataPedido)} (vencido)` : dstr(o.dataPedido)}
-                          </td>
-                          <td className="px-3 py-2.5 text-right">
-                            <span className="font-extrabold text-slate-900">{o.qtdSugerida != null ? o.qtdSugerida.toLocaleString("pt-BR") : "—"}</span>
-                            {o.emCrescimento && <span className="block text-[10px] text-emerald-600 font-bold">reforçada +{Math.round(o.folgaTotal * 100)}%</span>}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              <div className="px-5 py-3 text-xs text-slate-400 border-t border-slate-100">
-                Qtd sugerida = (vendas/dia × {cobertura} dias × margem) − saldo atual. A margem começa em 20% e aumenta para produtos em crescimento
-                (até dobrar a compra), usando a velocidade recente como base. Produtos em queda mantêm os 20%. {R.nOficial} de {R.kpis.nSku} SKUs são OffRacer.
-              </div>
-            </div>
             </>)}
 
             {/* ================= TELA: COMPRAR AGORA ================= */}
@@ -851,6 +655,17 @@ export default function Dashboard({ role, email, initialLocked }) {
 
         {/* ================= TELA: ESTOQUE (independente de vendas) ================= */}
         {tela === "estoque" && <EstoqueScreen />}
+
+        {/* ================= TELA: DESEMPENHO DE TÍTULOS ================= */}
+        {tela === "desempenho" && (
+          !R || R.error || !R.desempenhoTitulos ? (
+            <div className="bg-white rounded-2xl p-8 text-center" style={{ border: "1px solid var(--line)", color: "var(--muted)" }}>
+              Sincronize as vendas (aba Mercado Livre) ou suba a planilha de vendas para ver o desempenho das trocas de título.
+            </div>
+          ) : (
+            <DesempenhoTitulos itens={R.desempenhoTitulos} />
+          )
+        )}
 
         {/* ================= TELA: SUGESTÕES DE APRIMORAMENTO ================= */}
         {tela === "aprimorar" && (
