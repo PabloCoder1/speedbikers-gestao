@@ -7,7 +7,7 @@ import { analyze, readSheetSmart, mlRowsToVendas, brl, brlc, dstr } from "@/lib/
 import EstoqueScreen from "@/components/EstoqueScreen";
 import AprimorarScreen from "@/components/AprimorarScreen";
 import DesempenhoTitulos from "@/components/DesempenhoTitulos";
-
+import CompararPrecos from "@/components/CompararPrecos";
 import {
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer,
@@ -17,7 +17,6 @@ import {
   RefreshCw, ShoppingCart, Clock, Tag, ChevronDown, ChevronRight, Layers, Eye,
   Lock, Unlock, LogOut, Cloud, FileSpreadsheet, ShieldAlert, Warehouse, Menu, Sparkles, Scale,
 } from "lucide-react";
-import CompararPrecos from "./CompararPrecos";
 
 // ---------------- UI atoms ----------------
 const CLS_COLOR = { A: "#1A3FB0", B: "#FFC107", C: "#B8B2A6" };
@@ -119,10 +118,22 @@ export default function Dashboard({ role, email, initialLocked }) {
   const supabase = createClient();
   const [fonte, setFonte] = useState('upload'); // 'upload' | 'ml'
   const [contaAtiva, setContaAtiva] = useState('speedbikers'); // conta ML ativa ('todas' soma tudo)
+  const [contasConectadas, setContasConectadas] = useState<string[]>([]); // contas com token salvo
   const [locked, setLocked] = useState(initialLocked);
   const [lockBusy, setLockBusy] = useState(false);
   const [mlBusy, setMlBusy] = useState(false);
   const [mlMsg, setMlMsg] = useState('');
+
+  // busca quais contas estão conectadas (pra mostrar o sinalizador na sidebar)
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch("/api/contas-status");
+        const j = await r.json();
+        if (r.ok && j.conectadas) setContasConectadas(j.conectadas);
+      } catch {}
+    })();
+  }, [mlMsg]); // reavalia após conectar/sincronizar
   const [autoSync, setAutoSync] = useState(true); // sincronização automática a cada 5min
   const [ultimoSync, setUltimoSync] = useState<Date | null>(null);
 
@@ -260,14 +271,14 @@ export default function Dashboard({ role, email, initialLocked }) {
     setUltimoSync(new Date());
   }, [contaAtiva]);
 
-  // ---- sincronização automática a cada 5 minutos (últimos 7 dias) ----
+  // ---- sincronização automática a cada 5 minutos (últimos 7 dias, conta ativa) ----
   useEffect(() => {
     if (!autoSync || fonte !== "ml") return;
     const id = setInterval(() => {
-      if (!mlBusy) syncML(7); // puxa os últimos 7 dias, silencioso
+      if (!mlBusy) syncML(7, contaAtiva); // só a conta que está sendo vista agora
     }, 5 * 60 * 1000); // 5 minutos
     return () => clearInterval(id);
-  }, [autoSync, fonte, mlBusy, syncML]);
+  }, [autoSync, fonte, mlBusy, syncML, contaAtiva]);
 
   // ---- admin: travar / destravar o app para todos ----
   const toggleLock = useCallback(async () => {
@@ -379,13 +390,18 @@ export default function Dashboard({ role, email, initialLocked }) {
                 style={contaAtiva === "todas" ? { background: "var(--blue)", color: "#fff" } : { color: "#56637a" }}>
                 <Layers size={15} style={{ color: contaAtiva === "todas" ? "#fff" : "#8592a8" }} /> Todas as contas
               </button>
-              {CONTAS_ML.map((c) => (
-                <button key={c.id} onClick={() => { setContaAtiva(c.id); }}
-                  className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-[13px] font-semibold my-0.5 text-left transition"
-                  style={contaAtiva === c.id ? { background: "var(--blue)", color: "#fff" } : { color: "#56637a" }}>
-                  <span className="w-[6px] h-[6px] rounded-full ml-1" style={{ background: contaAtiva === c.id ? "#fff" : "#c3ccda" }} /> {c.nome}
-                </button>
-              ))}
+              {CONTAS_ML.map((c) => {
+                const conectada = contasConectadas.includes(c.id);
+                return (
+                  <button key={c.id} onClick={() => { setContaAtiva(c.id); }}
+                    className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-[13px] font-semibold my-0.5 text-left transition"
+                    style={contaAtiva === c.id ? { background: "var(--blue)", color: "#fff" } : { color: "#56637a" }}>
+                    <span className="w-[6px] h-[6px] rounded-full ml-1"
+                      style={{ background: conectada ? "#18a56d" : (contaAtiva === c.id ? "#ffffff88" : "#d0d7e2") }} /> {c.nome}
+                    {!conectada && <span className="ml-auto text-[9px] font-bold" style={{ color: contaAtiva === c.id ? "#ffffffcc" : "#aab4c6" }}>conectar</span>}
+                  </button>
+                );
+              })}
             </div>
           )}
         </nav>
