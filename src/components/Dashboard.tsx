@@ -7,6 +7,7 @@ import { analyze, readSheetSmart, mlRowsToVendas, brl, brlc, dstr } from "@/lib/
 import EstoqueScreen from "@/components/EstoqueScreen";
 import AprimorarScreen from "@/components/AprimorarScreen";
 import DesempenhoTitulos from "@/components/DesempenhoTitulos";
+
 import {
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer,
@@ -14,11 +15,19 @@ import {
 import {
   Upload, TrendingDown, TrendingUp, Package, AlertTriangle, DollarSign, Boxes,
   RefreshCw, ShoppingCart, Clock, Tag, ChevronDown, ChevronRight, Layers, Eye,
-  Lock, Unlock, LogOut, Cloud, FileSpreadsheet, ShieldAlert, Warehouse, Menu, Sparkles,
+  Lock, Unlock, LogOut, Cloud, FileSpreadsheet, ShieldAlert, Warehouse, Menu, Sparkles, Scale,
 } from "lucide-react";
+import CompararPrecos from "./CompararPrecos";
 
 // ---------------- UI atoms ----------------
 const CLS_COLOR = { A: "#1A3FB0", B: "#FFC107", C: "#B8B2A6" };
+const CONTAS_ML = [
+  { id: "speedbikers", nome: "SpeedBikers" },
+  { id: "offracer", nome: "OffRacer" },
+  { id: "sb", nome: "SB" },
+  { id: "gmr", nome: "GMR" },
+];
+const CONTA_NOMES: any = { speedbikers: "SpeedBikers", offracer: "OffRacer", sb: "SB", gmr: "GMR", todas: "Todas" };
 const MOTIVO_COLOR = { vermelho: "bg-red-100 text-red-700", azul: "bg-blue-100 text-blue-700", dourado: "bg-amber-100 text-amber-800", cinza: "bg-slate-100 text-slate-500" };
 
 function KpiCard({ icon: Icon, label, value, sub, tone = "slate" }: any) {
@@ -109,6 +118,7 @@ export default function Dashboard({ role, email, initialLocked }) {
   const router = useRouter();
   const supabase = createClient();
   const [fonte, setFonte] = useState('upload'); // 'upload' | 'ml'
+  const [contaAtiva, setContaAtiva] = useState('speedbikers'); // conta ML ativa ('todas' soma tudo)
   const [locked, setLocked] = useState(initialLocked);
   const [lockBusy, setLockBusy] = useState(false);
   const [mlBusy, setMlBusy] = useState(false);
@@ -158,67 +168,97 @@ export default function Dashboard({ role, email, initialLocked }) {
   }, []);
 
   // ---- sincronizar via API do Mercado Livre ----
-  const syncML = useCallback(async (dias) => {
+  const syncML = useCallback(async (dias, conta = contaAtiva) => {
     setMlBusy(true); setMlMsg("");
     try {
-      const r = await fetch(`/api/ml/sync?dias=${dias}`);
-      const j = await r.json();
-      if (!r.ok || j.error) {
-        setMlMsg(j.error === "sem_conexao_ml"
-          ? "Conecte sua conta do Mercado Livre primeiro (botão abaixo)."
-          : "Erro ao sincronizar: " + (j.error || r.status));
-      } else {
-        const rows = mlRowsToVendas(j.rows);
-        setVendasRaw(rows);
-        const label = dias === 0 ? "período total disponível" : `últimos ${dias} dias`;
-        setVName(`Mercado Livre — ${j.count} vendas (${label})`);
-        setMlMsg(`Sincronizado: ${j.count} itens de venda dos ${label}.`);
+      // quais contas buscar: uma específica, ou todas as 4 se "todas"
+      const contas = conta === "todas" ? ["speedbikers", "offracer", "sb", "gmr"] : [conta];
+      let todasRows: any[] = [];
+      let erros: string[] = [];
+      let semConexao = 0;
 
-        // ---- vendas de HOJE, agrupadas por produto (acumulado) ----
-        // "hoje" no fuso do Brasil (America/Sao_Paulo), pra não errar perto da meia-noite
-        const hojeBR = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }); // AAAA-MM-DD
-        const mapa = new Map();
-        for (const v of (j.rows || [])) {
-          if (!v.data) continue;
-          const diaBR = new Date(v.data).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
-          if (diaBR !== hojeBR) continue;
-          const key = v.sku || v.mlb || v.titulo;
-          let o = mapa.get(key);
-          if (!o) { o = { sku: v.sku, titulo: v.titulo, unidades: 0, receita: 0 }; mapa.set(key, o); }
-          o.unidades += Number(v.unidades) || 0;
-          o.receita += Number(v.receita) || 0;
-          if (v.titulo) o.titulo = v.titulo;
-        }
-        const lista = [...mapa.values()].sort((a, b) => b.unidades - a.unidades);
-        setVendasHoje(lista);
-
-        // ---- baixa automática de estoque (pedidos novos, de hoje em diante) ----
+      for (const c of contas) {
         try {
-          const pedidos = (j.rows || [])
-            .filter((v: any) => v.order_id && v.sku)
-            .map((v: any) => ({ order_id: v.order_id, sku: v.sku, quantidade: v.unidades, data: v.data }));
-          if (pedidos.length) {
-            const rb = await fetch("/api/baixa", {
-              method: "POST", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ pedidos }),
-            });
-            const jb = await rb.json();
-            if (rb.ok && jb.pedidosDescontados > 0) {
-              setMlMsg(`Sincronizado: ${j.count} itens. Baixa automática: ${jb.itensDescontados} itens descontados de ${jb.pedidosDescontados} pedidos novos.`);
-              // recarrega o estoque do Supabase pra refletir o novo saldo
-              try {
-                const re = await fetch("/api/estoque");
-                const je = await re.json();
-                if (re.ok && je.produtos) setProdutosSupabase(je.produtos);
-              } catch {}
-            }
+          const r = await fetch(`/api/ml/sync?dias=${dias}&conta=${c}`);
+          const j = await r.json();
+          if (!r.ok || j.error) {
+            if (j.error === "sem_conexao_ml") semConexao++;
+            else erros.push(`${c}: ${j.error || r.status}`);
+          } else {
+            // marca cada linha com a conta de origem
+            (j.rows || []).forEach((row: any) => { row.conta = c; });
+            todasRows = todasRows.concat(j.rows || []);
           }
-        } catch { /* baixa é best-effort; não bloqueia a sincronização */ }
+        } catch { erros.push(`${c}: rede`); }
       }
+
+      if (todasRows.length === 0) {
+        if (semConexao === contas.length) {
+          setMlMsg(conta === "todas"
+            ? "Nenhuma conta conectada ainda. Conecte as contas abaixo."
+            : "Conecte esta conta do Mercado Livre primeiro (botão abaixo).");
+        } else {
+          setMlMsg("Erro ao sincronizar" + (erros.length ? ": " + erros.join(" · ") : "."));
+        }
+        setMlBusy(false); setUltimoSync(new Date());
+        return;
+      }
+
+      const rows = mlRowsToVendas(todasRows);
+      setVendasRaw(rows);
+      const label = dias === 0 ? "período total disponível" : `últimos ${dias} dias`;
+      const nomeConta = conta === "todas" ? "todas as contas" : (CONTA_NOMES[conta] || conta);
+      setVName(`Mercado Livre (${nomeConta}) — ${todasRows.length} vendas (${label})`);
+      setMlMsg(`Sincronizado (${nomeConta}): ${todasRows.length} itens de venda dos ${label}.`);
+
+      // ---- vendas de HOJE, agrupadas por produto (acumulado) ----
+      const hojeBR = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+      const mapa = new Map();
+      for (const v of todasRows) {
+        if (!v.data) continue;
+        const diaBR = new Date(v.data).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+        if (diaBR !== hojeBR) continue;
+        const key = v.sku || v.mlb || v.titulo;
+        let o = mapa.get(key);
+        if (!o) { o = { sku: v.sku, titulo: v.titulo, unidades: 0, receita: 0 }; mapa.set(key, o); }
+        o.unidades += Number(v.unidades) || 0;
+        o.receita += Number(v.receita) || 0;
+        if (v.titulo) o.titulo = v.titulo;
+      }
+      setVendasHoje([...mapa.values()].sort((a, b) => b.unidades - a.unidades));
+
+      // ---- baixa automática de estoque (por conta, evita descontar 2x) ----
+      try {
+        // agrupa pedidos por conta pra registrar a origem certa
+        const porConta: Record<string, any[]> = {};
+        for (const v of todasRows) {
+          if (!v.order_id || !v.sku) continue;
+          const c = v.conta || conta;
+          (porConta[c] = porConta[c] || []).push({ order_id: v.order_id, sku: v.sku, quantidade: v.unidades, data: v.data });
+        }
+        let totalDesc = 0, totalPed = 0;
+        for (const [c, pedidos] of Object.entries(porConta)) {
+          if (!pedidos.length) continue;
+          const rb = await fetch("/api/baixa", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ pedidos, conta: c }),
+          });
+          const jb = await rb.json();
+          if (rb.ok) { totalDesc += jb.itensDescontados || 0; totalPed += jb.pedidosDescontados || 0; }
+        }
+        if (totalPed > 0) {
+          setMlMsg(`Sincronizado (${nomeConta}): ${todasRows.length} itens. Baixa automática: ${totalDesc} itens de ${totalPed} pedidos novos.`);
+          try {
+            const re = await fetch("/api/estoque");
+            const je = await re.json();
+            if (re.ok && je.produtos) setProdutosSupabase(je.produtos);
+          } catch {}
+        }
+      } catch { /* baixa é best-effort */ }
     } catch (e) { setMlMsg("Falha de rede ao sincronizar."); }
     setMlBusy(false);
     setUltimoSync(new Date());
-  }, []);
+  }, [contaAtiva]);
 
   // ---- sincronização automática a cada 5 minutos (últimos 7 dias) ----
   useEffect(() => {
@@ -297,6 +337,7 @@ export default function Dashboard({ role, email, initialLocked }) {
             ["dashboard", "Visão geral", Layers],
             ["comprar", "Comprar agora", ShoppingCart],
             ["desempenho", "Desempenho de títulos", TrendingUp],
+            ["comparar", "Comparar preços", Scale],
             ["aprimorar", "Otimizar anúncios", Sparkles],
             ["estoque", "Estoque", Warehouse],
           ].map(([k, l, Ic]: any) => {
@@ -328,6 +369,25 @@ export default function Dashboard({ role, email, initialLocked }) {
             <Cloud size={18} style={{ color: "#71809a" }} /> Mercado Livre
             <span className="ml-auto w-[7px] h-[7px] rounded-full" style={{ background: "#18a56d" }} />
           </button>
+
+          {/* seletor de conta ML (aparece quando a fonte é Mercado Livre) */}
+          {fonte === "ml" && (
+            <div className="mt-2 mb-1 pl-2">
+              <div className="text-[9px] font-bold tracking-[0.08em] px-1 mb-1" style={{ color: "#aab4c6" }}>CONTA ATIVA</div>
+              <button onClick={() => { setContaAtiva("todas"); }}
+                className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-[13px] font-semibold my-0.5 text-left transition"
+                style={contaAtiva === "todas" ? { background: "var(--blue)", color: "#fff" } : { color: "#56637a" }}>
+                <Layers size={15} style={{ color: contaAtiva === "todas" ? "#fff" : "#8592a8" }} /> Todas as contas
+              </button>
+              {CONTAS_ML.map((c) => (
+                <button key={c.id} onClick={() => { setContaAtiva(c.id); }}
+                  className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-[13px] font-semibold my-0.5 text-left transition"
+                  style={contaAtiva === c.id ? { background: "var(--blue)", color: "#fff" } : { color: "#56637a" }}>
+                  <span className="w-[6px] h-[6px] rounded-full ml-1" style={{ background: contaAtiva === c.id ? "#fff" : "#c3ccda" }} /> {c.nome}
+                </button>
+              ))}
+            </div>
+          )}
         </nav>
 
         {/* rodapé */}
@@ -367,12 +427,13 @@ export default function Dashboard({ role, email, initialLocked }) {
               OPERAÇÃO · {hojeFmt}
             </p>
             <h1 className="font-display text-[34px] font-bold leading-none mb-1.5">
-              {tela === "dashboard" ? "Visão geral" : tela === "comprar" ? "Comprar agora" : tela === "desempenho" ? "Desempenho de títulos" : tela === "aprimorar" ? "Otimizar anúncios" : "Estoque"}
+              {tela === "dashboard" ? "Visão geral" : tela === "comprar" ? "Comprar agora" : tela === "desempenho" ? "Desempenho de títulos" : tela === "comparar" ? "Comparar preços" : tela === "aprimorar" ? "Otimizar anúncios" : "Estoque"}
             </h1>
             <p className="text-sm" style={{ color: "var(--muted)" }}>
               {tela === "dashboard" ? "O que precisa da sua atenção hoje." :
                tela === "comprar" ? "Reposição calculada pela sua demanda e prazo de entrega." :
                tela === "desempenho" ? "Trocas de título que deram certo ou derrubaram as vendas — foi o título ou o preço?" :
+               tela === "comparar" ? "O mesmo produto entre suas contas — evite competir consigo mesmo." :
                tela === "aprimorar" ? "Oportunidades para melhorar a performance dos anúncios." :
                "Controle seus produtos, marcas e prazos de reposição."}
             </p>
@@ -420,12 +481,21 @@ export default function Dashboard({ role, email, initialLocked }) {
             <div className="flex gap-3 flex-wrap">
               <button onClick={() => syncML(periodoDias)} disabled={mlBusy}
                 className="flex items-center gap-2 bg-sbblue text-white font-bold rounded-lg px-4 py-2 disabled:opacity-60">
-                <RefreshCw size={16} className={mlBusy ? "animate-spin" : ""} /> Sincronizar vendas
+                <RefreshCw size={16} className={mlBusy ? "animate-spin" : ""} /> Sincronizar {contaAtiva === "todas" ? "todas as contas" : CONTA_NOMES[contaAtiva]}
               </button>
-              <a href="/api/ml/authorize"
-                className="flex items-center gap-2 bg-white text-sbblue font-bold rounded-lg px-4 py-2 border border-sbblue">
-                <Cloud size={16} /> Conectar conta do Mercado Livre
-              </a>
+            </div>
+
+            {/* conectar cada conta */}
+            <div className="mt-4">
+              <div className="text-xs font-semibold text-slate-500 mb-2">Conectar contas do Mercado Livre</div>
+              <div className="flex gap-2 flex-wrap">
+                {CONTAS_ML.map((c) => (
+                  <a key={c.id} href={`/api/ml/authorize?conta=${c.id}`}
+                    className="flex items-center gap-2 bg-white text-sbblue font-semibold rounded-lg px-3 py-2 border border-sbblue text-[13px]">
+                    <Cloud size={14} /> {c.nome}
+                  </a>
+                ))}
+              </div>
             </div>
             {mlMsg && <div className="text-sm mt-3 text-slate-700 bg-slate-100 rounded-lg px-3 py-2">{mlMsg}</div>}
             {periodoDias === 0 && (
@@ -773,6 +843,9 @@ export default function Dashboard({ role, email, initialLocked }) {
             })()}
           </>
         )}
+
+        {/* ================= TELA: COMPARAR PREÇOS ENTRE CONTAS ================= */}
+        {tela === "comparar" && <CompararPrecos />}
 
         {/* ================= TELA: ESTOQUE (independente de vendas) ================= */}
         {tela === "estoque" && <EstoqueScreen />}

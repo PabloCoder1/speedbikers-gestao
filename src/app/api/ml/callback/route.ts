@@ -1,29 +1,27 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-server";
+import { credConta } from "@/lib/ml-helpers";
 
-// GET /api/ml/callback?code=...&state=<user_id>
-// O Mercado Livre redireciona aqui após o usuário autorizar.
-// IMPORTANTE: como esta requisição vem de um site externo (o ML), o navegador
-// NÃO envia os cookies de sessão do Supabase. Por isso NÃO dá para usar
-// supabase.auth.getUser() aqui — ele viria vazio e o fluxo quebraria.
-// Em vez disso confiamos no "state" (que contém o user.id que nós mesmos
-// enviamos no /authorize) e gravamos o token com o cliente admin (service role).
+// GET /api/ml/callback?code=...&state=<user_id>:<conta>
+// O Mercado Livre redireciona aqui após o usuário autorizar uma conta.
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const code = searchParams.get("code");
-  const userId = searchParams.get("state"); // = user.id enviado no /authorize
+  const state = searchParams.get("state") || "";
+  const [userId, contaRaw] = state.split(":");
+  const conta = contaRaw || "speedbikers";
 
   if (!code || !userId) {
     return NextResponse.redirect(new URL("/?ml=erro_sem_code", req.url));
   }
 
-  // troca o code por tokens (server-side; o secret nunca vai ao navegador)
+  const cred = credConta(conta);
   const body = new URLSearchParams({
     grant_type: "authorization_code",
-    client_id: process.env.ML_CLIENT_ID!,
-    client_secret: process.env.ML_CLIENT_SECRET!,
+    client_id: cred.clientId,
+    client_secret: cred.clientSecret,
     code,
-    redirect_uri: process.env.ML_REDIRECT_URI!,
+    redirect_uri: cred.redirectUri,
   });
 
   const resp = await fetch("https://api.mercadolibre.com/oauth/token", {
@@ -41,14 +39,15 @@ export async function GET(req: Request) {
   const tok = await resp.json();
   const expiresAt = new Date(Date.now() + (tok.expires_in ?? 21600) * 1000).toISOString();
 
-  // grava o token com o cliente admin (ignora RLS, funciona sem cookie de sessão)
   const admin = createAdminClient();
-  await admin.from("ml_tokens").delete().eq("user_id", userId);
+  // remove token antigo desta conta e grava o novo
+  await admin.from("ml_tokens").delete().eq("user_id", userId).eq("conta", conta);
   const { error } = await admin.from("ml_tokens").insert({
     user_id: userId,
+    conta,
     ml_user_id: tok.user_id ?? null,
     access_token: tok.access_token,
-    refresh_token: tok.refresh_token ?? "", // evita erro se o ML não devolver refresh
+    refresh_token: tok.refresh_token ?? "",
     expires_at: expiresAt,
   });
 
@@ -57,5 +56,5 @@ export async function GET(req: Request) {
     return NextResponse.redirect(new URL("/?ml=erro_gravar", req.url));
   }
 
-  return NextResponse.redirect(new URL("/?ml=conectado", req.url));
+  return NextResponse.redirect(new URL(`/?ml=conectado&conta=${conta}`, req.url));
 }

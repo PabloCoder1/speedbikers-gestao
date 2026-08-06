@@ -10,7 +10,7 @@ export async function POST(req: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "não autenticado" }, { status: 401 });
 
-  const { pedidos } = await req.json();
+  const { pedidos, conta = "speedbikers" } = await req.json();
   if (!Array.isArray(pedidos)) return NextResponse.json({ error: "sem pedidos" }, { status: 400 });
 
   // marco de início da baixa (só desconta vendas após esta data)
@@ -47,8 +47,8 @@ export async function POST(req: Request) {
     const depois = antes - qtd;
 
     await supabase.from("produtos").update({ quantidade: depois, atualizado_em: new Date().toISOString() }).eq("sku", sku);
-    historico.push({ order_id: String(p.order_id), sku, quantidade: qtd, saldo_antes: antes, saldo_depois: depois });
-    marcados.push({ order_id: String(p.order_id), sku, quantidade: qtd });
+    historico.push({ order_id: String(p.order_id), sku, quantidade: qtd, saldo_antes: antes, saldo_depois: depois, conta });
+    marcados.push({ order_id: String(p.order_id), sku, quantidade: qtd, conta });
     descontados++; itens += qtd;
   }
 

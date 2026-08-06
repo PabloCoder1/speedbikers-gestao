@@ -1,18 +1,39 @@
 // Helpers compartilhados para integração com o Mercado Livre.
 
-// Garante um access_token válido, renovando com refresh_token se expirado.
-export async function getValidToken(supabase: any, userId: string) {
+// As 4 contas do Mercado Livre. Cada uma tem sua própria aplicação (client_id/secret),
+// configurada nas variáveis de ambiente da Vercel.
+export const CONTAS = [
+  { id: "speedbikers", nome: "SpeedBikers" },
+  { id: "offracer", nome: "OffRacer" },
+  { id: "sb", nome: "SB" },
+  { id: "gmr", nome: "GMR" },
+];
+
+// pega as credenciais de uma conta a partir das env vars
+// ex.: conta "speedbikers" -> ML_CLIENT_ID_SPEEDBIKERS / ML_CLIENT_SECRET_SPEEDBIKERS
+export function credConta(conta: string) {
+  const up = conta.toUpperCase();
+  return {
+    clientId: process.env[`ML_CLIENT_ID_${up}`] || process.env.ML_CLIENT_ID || "",
+    clientSecret: process.env[`ML_CLIENT_SECRET_${up}`] || process.env.ML_CLIENT_SECRET || "",
+    redirectUri: process.env.ML_REDIRECT_URI || "",
+  };
+}
+
+// Garante um access_token válido para uma CONTA específica, renovando se expirado.
+export async function getValidToken(supabase: any, userId: string, conta: string = "speedbikers") {
   const { data: row } = await supabase
-    .from("ml_tokens").select("*").eq("user_id", userId).single();
+    .from("ml_tokens").select("*").eq("user_id", userId).eq("conta", conta).single();
   if (!row) return null;
 
   const expired = new Date(row.expires_at).getTime() < Date.now() + 60_000;
   if (!expired) return row.access_token;
 
+  const cred = credConta(conta);
   const body = new URLSearchParams({
     grant_type: "refresh_token",
-    client_id: process.env.ML_CLIENT_ID!,
-    client_secret: process.env.ML_CLIENT_SECRET!,
+    client_id: cred.clientId,
+    client_secret: cred.clientSecret,
     refresh_token: row.refresh_token,
   });
   const resp = await fetch("https://api.mercadolibre.com/oauth/token", {
@@ -28,7 +49,7 @@ export async function getValidToken(supabase: any, userId: string) {
     refresh_token: tok.refresh_token ?? row.refresh_token,
     expires_at: expiresAt,
     updated_at: new Date().toISOString(),
-  }).eq("user_id", userId);
+  }).eq("user_id", userId).eq("conta", conta);
   return tok.access_token;
 }
 
