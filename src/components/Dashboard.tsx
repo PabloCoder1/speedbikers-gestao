@@ -8,6 +8,7 @@ import EstoqueScreen from "@/components/EstoqueScreen";
 import AprimorarScreen from "@/components/AprimorarScreen";
 import DesempenhoTitulos from "@/components/DesempenhoTitulos";
 import CompararPrecos from "@/components/CompararPrecos";
+import AdminScreen from "@/components/AdminScreen";
 import {
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer,
@@ -15,7 +16,7 @@ import {
 import {
   Upload, TrendingDown, TrendingUp, Package, AlertTriangle, DollarSign, Boxes,
   RefreshCw, ShoppingCart, Clock, Tag, ChevronDown, ChevronRight, Layers, Eye,
-  Lock, Unlock, LogOut, Cloud, FileSpreadsheet, ShieldAlert, Warehouse, Menu, Sparkles, Scale,
+  Lock, Unlock, LogOut, Cloud, FileSpreadsheet, ShieldAlert, Warehouse, Menu, Sparkles, Scale, Shield,
 } from "lucide-react";
 
 // ---------------- UI atoms ----------------
@@ -271,6 +272,14 @@ export default function Dashboard({ role, email, initialLocked }) {
     setUltimoSync(new Date());
   }, [contaAtiva]);
 
+  // ---- heartbeat: marca atividade do usuário (pro admin ver "ativo há X min") ----
+  useEffect(() => {
+    const bater = () => { fetch("/api/heartbeat", { method: "POST" }).catch(() => {}); };
+    bater(); // marca ao abrir
+    const id = setInterval(bater, 2 * 60 * 1000); // a cada 2 min
+    return () => clearInterval(id);
+  }, []);
+
   // ---- sincronização automática a cada 5 minutos (últimos 7 dias, conta ativa) ----
   useEffect(() => {
     if (!autoSync || fonte !== "ml") return;
@@ -351,6 +360,7 @@ export default function Dashboard({ role, email, initialLocked }) {
             ["comparar", "Comparar preços", Scale],
             ["aprimorar", "Otimizar anúncios", Sparkles],
             ["estoque", "Estoque", Warehouse],
+            ...(role === "admin" ? [["admin", "Administração", Shield]] : []),
           ].map(([k, l, Ic]: any) => {
             const ativo = tela === k;
             return (
@@ -443,7 +453,7 @@ export default function Dashboard({ role, email, initialLocked }) {
               OPERAÇÃO · {hojeFmt}
             </p>
             <h1 className="font-display text-[34px] font-bold leading-none mb-1.5">
-              {tela === "dashboard" ? "Visão geral" : tela === "comprar" ? "Comprar agora" : tela === "desempenho" ? "Desempenho de títulos" : tela === "comparar" ? "Comparar preços" : tela === "aprimorar" ? "Otimizar anúncios" : "Estoque"}
+              {tela === "dashboard" ? "Visão geral" : tela === "comprar" ? "Comprar agora" : tela === "desempenho" ? "Desempenho de títulos" : tela === "comparar" ? "Comparar preços" : tela === "aprimorar" ? "Otimizar anúncios" : tela === "admin" ? "Administração" : "Estoque"}
             </h1>
             <p className="text-sm" style={{ color: "var(--muted)" }}>
               {tela === "dashboard" ? "O que precisa da sua atenção hoje." :
@@ -451,6 +461,7 @@ export default function Dashboard({ role, email, initialLocked }) {
                tela === "desempenho" ? "Trocas de título que deram certo ou derrubaram as vendas — foi o título ou o preço?" :
                tela === "comparar" ? "O mesmo produto entre suas contas — evite competir consigo mesmo." :
                tela === "aprimorar" ? "Oportunidades para melhorar a performance dos anúncios." :
+               tela === "admin" ? "Usuários, aprovações e atividade." :
                "Controle seus produtos, marcas e prazos de reposição."}
             </p>
           </div>
@@ -859,6 +870,9 @@ export default function Dashboard({ role, email, initialLocked }) {
             })()}
           </>
         )}
+
+        {/* ================= TELA: ADMINISTRAÇÃO (só admin) ================= */}
+        {tela === "admin" && role === "admin" && <AdminScreen />}
 
         {/* ================= TELA: COMPARAR PREÇOS ENTRE CONTAS ================= */}
         {tela === "comparar" && <CompararPrecos />}
